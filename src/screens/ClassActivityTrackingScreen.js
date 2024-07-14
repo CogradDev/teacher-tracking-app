@@ -2,7 +2,6 @@ import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
-  Button,
   TextInput,
   Image,
   StyleSheet,
@@ -18,54 +17,38 @@ import {launchCamera} from 'react-native-image-picker';
 import moment from 'moment';
 import {SelectList} from 'react-native-dropdown-select-list';
 import {ScrollView} from 'react-native-gesture-handler';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiList from '../services/api';
+
 const {width} = Dimensions.get('window');
 
 const ClassActivityTrackingScreen = ({navigation}) => {
   const [classSelected, setClassSelected] = useState(null);
   const [subjectSelected, setSubjectSelected] = useState(null);
   const [tasksVisible, setTasksVisible] = useState(false);
-  const [photo, setPhoto] = useState(null);
+  const [photos, setPhotos] = useState([]);
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [tasksData, setTasksData] = useState({
-    date: moment().format('YYYY-MM-DD'),
-    teacher: 'Mss. Radhika',
-    class: {
-      nursery: {
-        math: {
-          attendance: false,
-          photo: '', 
-          task: {
-            task1: {
-              description: 'Complete counting worksheet',
-              status: false,
-              remark: '',
-            },
-            task2: {
-              description: 'Learn numbers 1 to 10',
-              status: true,
-              remark: 'Completed successfully',
-            },
-          },
-        },
-      },
-    },
-  });
-
-  const navigateToCommunicationScreen = () => {
-    navigation.navigate('Communication');
-  };
+  const [tasksData, setTasksData] = useState({});
+  const [teacherID, setTeacherId] = useState('teacherId');
 
   useEffect(() => {
-    const availableClasses = Object.keys(tasksData.class);
-    const classesArray = availableClasses.map(className => ({
-      label: className.charAt(0).toUpperCase() + className.slice(1),
-      value: className,
-    }));
-    setClasses(classesArray);
+    const Data = async () => {
+      const teacherData = await AsyncStorage.getItem('teacherData');
+      const parsedTeacherData = JSON.parse(teacherData);
+      setTeacherId(parsedTeacherData._id);
+    };
+    Data();
+  }, []);
 
+  useEffect(() => {
+    fetchClassPeriodsByTeacher();
+  }, []);
+
+  useEffect(() => {
     if (classSelected) {
-      const availableSubjects = Object.keys(tasksData.class[classSelected]);
+      const availableSubjects = Object.keys(tasksData[classSelected] || {});
       const subjectsArray = availableSubjects.map(subjectName => ({
         label: subjectName.charAt(0).toUpperCase() + subjectName.slice(1),
         value: subjectName,
@@ -76,9 +59,63 @@ const ClassActivityTrackingScreen = ({navigation}) => {
     }
   }, [classSelected, tasksData]);
 
+  const fetchClassPeriodsByTeacher = async () => {
+    try {
+      const response = await axios.get(
+        apiList.getClassPeriodByTeacher(teacherID),
+      );
+      const periods = response.data.reduce((acc, period) => {
+        if (!acc[period.class]) {
+          acc[period.class] = {};
+        }
+        if (!acc[period.class][period.subject]) {
+          acc[period.class][period.subject] = {
+            periodId: period._id,
+            tasks: {},
+            attendance: period.status,
+          };
+        }
+        acc[period.class][period.subject].periodId = period._id;
+        return acc;
+      }, {});
+
+      setTasksData(periods);
+
+      const availableClasses = Object.keys(periods).map(className => ({
+        label: className.charAt(0).toUpperCase() + className.slice(1),
+        value: className,
+      }));
+      setClasses(availableClasses);
+    } catch (error) {
+      console.error('Error fetching class periods:', error);
+      Alert.alert('Error', 'Failed to fetch class periods');
+    }
+  };
+
+  const fetchTasksByPeriod = async periodId => {
+    try {
+      const response = await fetch(apiList.getTasksByPeriods(periodId));
+      const tasks = response.data.reduce((acc, task) => {
+        acc[task._id] = {
+          description: task.title,
+          status: task.status,
+          remark: task.remark || '',
+        };
+        return acc;
+      }, {});
+      const updatedTasksData = {...tasksData};
+      updatedTasksData[classSelected][subjectSelected].tasks = tasks;
+      setTasksData(updatedTasksData);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      Alert.alert('Error', 'Failed to fetch tasks');
+    }
+  };
+
   const handleImagePicker = () => {
     const options = {
       noData: true,
+      mediaType: 'photo',
     };
     launchCamera(options, response => {
       if (response.didCancel) {
@@ -87,24 +124,38 @@ const ClassActivityTrackingScreen = ({navigation}) => {
         console.log('ImagePicker Error: ', response.errorCode);
       } else {
         const source = {uri: response.assets[0].uri};
-        setPhoto(source);
+        setPhotos(prevPhotos => [...prevPhotos, source]);
       }
     });
   };
 
-  const handleTaskComplete = (className, subjectName, taskKey) => {
+  const handleTaskComplete = async (className, subjectName, taskId) => {
     const updatedTasksData = {...tasksData};
-    const task = updatedTasksData.class[className][subjectName].task[taskKey];
+    const task = updatedTasksData[className][subjectName].tasks[taskId];
     task.status = !task.status;
-    task.photo = photo?.uri || ''; // Update photo URI if available
-    updatedTasksData.class[className][subjectName].task[taskKey] = task;
-    updatedTasksData.class[className][subjectName].attendance = true; // Mark attendance
-    setTasksData(updatedTasksData);
+    updatedTasksData[className][subjectName].tasks[taskId] = task;
+
+    try {
+      await fetch(apiList.updateTask(taskId), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: task.status,
+        }),
+      });
+      updatedTasksData[className][subjectName].attendance = true; // Mark attendance
+      setTasksData(updatedTasksData);
+    } catch (error) {
+      console.error('Error updating task status:', error);
+      Alert.alert('Error', 'Failed to update task status');
+    }
   };
 
-  const handleRemarkChange = (className, subjectName, taskKey, text) => {
+  const handleRemarkChange = (className, subjectName, taskId, text) => {
     const updatedTasksData = {...tasksData};
-    updatedTasksData.class[className][subjectName].task[taskKey].remark = text;
+    updatedTasksData[className][subjectName].tasks[taskId].remark = text;
     setTasksData(updatedTasksData);
   };
 
@@ -120,6 +171,8 @@ const ClassActivityTrackingScreen = ({navigation}) => {
 
   const toggleTasksVisibility = () => {
     if (classSelected && subjectSelected) {
+      const periodId = tasksData[classSelected][subjectSelected].periodId;
+      fetchTasksByPeriod(periodId);
       setTasksVisible(true);
     } else {
       setTasksVisible(false);
@@ -127,7 +180,7 @@ const ClassActivityTrackingScreen = ({navigation}) => {
   };
 
   const renderTask = ({item, index}) => {
-    const taskKey = item.key;
+    const taskId = item._id;
     const task = item.task;
 
     return (
@@ -135,7 +188,7 @@ const ClassActivityTrackingScreen = ({navigation}) => {
         <View style={styles.taskHeader}>
           <TouchableOpacity
             onPress={() =>
-              handleTaskComplete(classSelected, subjectSelected, taskKey)
+              handleTaskComplete(classSelected, subjectSelected, taskId)
             }>
             <Icon
               name={task.status ? 'checkbox' : 'square-outline'}
@@ -151,7 +204,7 @@ const ClassActivityTrackingScreen = ({navigation}) => {
           style={styles.remarksInput}
           placeholder="Remarks"
           onChangeText={text =>
-            handleRemarkChange(classSelected, subjectSelected, taskKey, text)
+            handleRemarkChange(classSelected, subjectSelected, taskId, text)
           }
           value={task.remark}
         />
@@ -161,42 +214,53 @@ const ClassActivityTrackingScreen = ({navigation}) => {
 
   const taskItems =
     classSelected && subjectSelected
-      ? Object.keys(tasksData.class[classSelected][subjectSelected].task).map(
+      ? Object.keys(tasksData[classSelected][subjectSelected].tasks).map(
           taskKey => ({
             key: taskKey,
-            task: tasksData.class[classSelected][subjectSelected].task[taskKey],
+            task: tasksData[classSelected][subjectSelected].tasks[taskKey],
           }),
         )
       : [];
 
-      const canSubmit = () => {
-        if (!classSelected || !subjectSelected) {
-          return false;
-        }
-      
-        const tasks = tasksData.class[classSelected][subjectSelected].task;
-        const allTasksCompleted = Object.values(tasks).every(task => task.photo !== '');
-      
-        return allTasksCompleted && photo !== null;
-      };
-      
-      const handleSubmit = () => {
-        if (canSubmit()) {
-          const updatedTasksData = {...tasksData};
-          updatedTasksData.class[classSelected][subjectSelected].attendance = true;
-      
-          setTasksData(updatedTasksData);
-          Alert.alert('Submitted!');
-          // Optionally, you can reset states here
-          setTasksVisible(false);
-          setPhoto(null);
-        } else {
-          Alert.alert('Error', 'Please complete all tasks and take a photo to submit.');
-        }
-      };
-      
-      
-      
+  const canSubmit = () => {
+    if (!classSelected || !subjectSelected) {
+      return false;
+    }
+
+    const tasks = tasksData[classSelected][subjectSelected].tasks;
+    const allTasksCompleted = Object.values(tasks).every(task => task.status);
+
+    return allTasksCompleted && photos.length > 0;
+  };
+
+  const handleSubmit = async () => {
+    if (canSubmit()) {
+      try {
+        const updatedTasksData = {...tasksData};
+        const periodId =
+          updatedTasksData[classSelected][subjectSelected].periodId;
+
+        await axios.put(`${baseURL}/classPeriods/${periodId}`, {
+          status: true,
+          photos: photos.map(photo => photo.uri),
+        });
+
+        updatedTasksData[classSelected][subjectSelected].attendance = true;
+        setTasksData(updatedTasksData);
+        Alert.alert('Submitted!');
+        setTasksVisible(false);
+        setPhotos([]);
+      } catch (error) {
+        console.error('Error submitting tasks:', error);
+        Alert.alert('Error', 'Failed to submit tasks');
+      }
+    } else {
+      Alert.alert(
+        'Error',
+        'Please complete all tasks and take photos to submit.',
+      );
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -215,7 +279,8 @@ const ClassActivityTrackingScreen = ({navigation}) => {
           </TouchableOpacity>
           <Text style={styles.headerText}>Class Activity Tracking</Text>
         </View>
-        <TouchableOpacity onPress={navigateToCommunicationScreen}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CommunicationScreen')}>
           <Icon
             name="notifications-outline"
             size={30}
@@ -227,60 +292,48 @@ const ClassActivityTrackingScreen = ({navigation}) => {
       <View style={styles.dateContainer}>
         <Text style={styles.dateText}>{moment().format('MMMM Do YYYY')}</Text>
       </View>
-
-      <ScrollView style={styles.content}>
-        <Text style={styles.label}>Select Class</Text>
-        <View style={styles.dropdownContainer}>
-          <SelectList
-            setSelected={setClassSelected}
-            data={classes}
-            placeholder="Select a class"
-            boxStyles={[styles.dropdown, styles.classDropdown]}
-            defaultOption={classSelected}
-            onSelect={() => toggleTasksVisibility()}
-          />
-        </View>
-
-        <Text style={styles.label}>Select Subject</Text>
-        <View style={styles.dropdownContainer}>
-          <SelectList
-            setSelected={setSubjectSelected}
-            data={subjects}
-            placeholder="Select a subject"
-            boxStyles={styles.dropdown}
-            defaultOption={subjectSelected}
-            onSelect={() => toggleTasksVisibility()}
-          />
-        </View>
-
-        {tasksVisible && (
-          <React.Fragment>
-            <FlatList
-              data={taskItems}
-              renderItem={renderTask}
-              keyExtractor={item => item.key}
-            />
-            {photo && <Image source={photo} style={styles.photo} />}
-
-            <View style={styles.footer}>
-              <TouchableOpacity
-                onPress={handleImagePicker}
-                style={styles.captureButton}>
-                <Icon name="camera-outline" size={50} color="#6495ed" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleSubmit}
-                style={[
-                  styles.button,
-                  {backgroundColor: canSubmit() ? '#6495ed' : '#ccc'},
-                ]}
-                disabled={!canSubmit()}>
-                <Text style={styles.submitButton}>Save & Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </React.Fragment>
-        )}
+      <View style={styles.dropdownContainer}>
+        <SelectList
+          setSelected={val => setClassSelected(val)}
+          data={classes}
+          placeholder="Select Class"
+          searchPlaceholder="Search Class"
+          boxStyles={styles.dropdownBox}
+        />
+        <SelectList
+          setSelected={val => setSubjectSelected(val)}
+          data={subjects}
+          placeholder="Select Subject"
+          searchPlaceholder="Search Subject"
+          boxStyles={styles.dropdownBox}
+        />
+      </View>
+      {tasksVisible && (
+        <FlatList
+          data={taskItems}
+          renderItem={renderTask}
+          keyExtractor={item => item.key}
+          contentContainerStyle={styles.tasksList}
+        />
+      )}
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity
+          style={styles.cameraButton}
+          onPress={handleImagePicker}>
+          <Icon name="camera" size={24} color="#fff" />
+          <Text style={styles.cameraButtonText}>Take Photo</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={handleSubmit}
+          disabled={!canSubmit()}>
+          <Text style={styles.submitButtonText}>Submit</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView horizontal style={styles.photosContainer}>
+        {photos.map((photo, index) => (
+          <Image key={index} source={photo} style={styles.photo} />
+        ))}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -289,121 +342,121 @@ const ClassActivityTrackingScreen = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 16,
     backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 0.04 * width,
-    paddingHorizontal: 0.025 * width,
-    backgroundColor: '#fff',
+    marginBottom: 16,
   },
   headingTextContainer: {
-    display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
   },
-  backButton: {},
+  backButton: {
+    marginRight: 8,
+  },
   headerText: {
-    fontSize: 0.06 * width,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#6495ed',
   },
-  notification: {},
+  notification: {
+    marginRight: 8,
+  },
   dateContainer: {
     alignItems: 'center',
-    marginVertical: 8,
+    marginBottom: 16,
   },
   dateText: {
     fontSize: 16,
     color: '#888',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginVertical: 8,
-    color: '#6495ed',
-  },
   dropdownContainer: {
     marginBottom: 16,
   },
-  dropdown: {
+  dropdownBox: {
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 4,
-    backgroundColor: '#fff',
+    marginBottom: 8,
   },
-  classDropdown: {
-    borderColor: '#6495ed',
+  tasksList: {
+    paddingBottom: 16,
   },
   taskContainer: {
     padding: 16,
     marginBottom: 8,
-    borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
+    borderColor: '#ccc',
+    borderRadius: 4,
   },
   taskHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
   taskDescription: {
     marginLeft: 8,
     fontSize: 16,
-    color: '#333',
   },
   remarksInput: {
-    marginTop: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#ccc',
     borderRadius: 4,
     padding: 8,
-    fontSize: 14,
-    color: '#333',
-    backgroundColor: '#f9f9f9',
+    marginTop: 8,
   },
   taskCompleted: {
-    borderColor: '#4caf50',
+    backgroundColor: '#e8f5e9',
   },
   taskWithRemark: {
-    borderColor: '#ffeb3b',
+    backgroundColor: '#fffde7',
   },
   taskNotCompleted: {
-    borderColor: '#f44336',
+    backgroundColor: '#ffebee',
   },
-  footer: {
+  buttonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  captureButton: {
-    padding: 10,
-  },
-  photo: {
-    width: width * 0.8,
-    height: undefined,
-    aspectRatio: 1,
-    borderRadius: 10,
-    alignSelf: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
-  button: {
+  cameraButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#6495ed',
+    padding: 16,
     borderRadius: 4,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+  },
+  cameraButtonText: {
+    marginLeft: 8,
+    color: '#fff',
+    fontSize: 16,
   },
   submitButton: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    backgroundColor: '#4caf50',
+    padding: 16,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    marginLeft: 8,
+  },
+  submitButtonText: {
     color: '#fff',
+    fontSize: 16,
+  },
+  photosContainer: {
+    flexDirection: 'row',
+    marginTop: 16,
+  },
+  photo: {
+    width: width / 3 - 16,
+    height: width / 3 - 16,
+    marginRight: 8,
+    borderRadius: 4,
   },
 });
 

@@ -1,54 +1,44 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, TouchableOpacity, Dimensions } from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  Dimensions,
+  AsyncStorage,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import apiList from '../services/api';
 
-const { width } = Dimensions.get('window');
+const {width} = Dimensions.get('window');
 
-const ProfileScreen = ({ navigation }) => {
-  const profile = {
-    name: 'Mrs. Radhika',
-    subjectsTaught: ['Mathematics', 'Hindi', 'Science', 'SST', 'English'],
-    contactInfo: 'john.doe@example.com | +91-1234567890',
-    qualification: 'Masters in Education',
-    experience: '10 years',
-    timetable: [
-      {
-        day: 'Monday',
-        classes: [
-          { time: '8am - 9am', subject: 'Mathematics', class: '10th' },
-          { time: '9am - 10am', subject: 'Physics', class: '10th' },
-        ],
-      },
-      {
-        day: 'Tuesday',
-        classes: [
-          { time: '8am - 9am', subject: 'Chemistry', class: '10th' },
-          { time: '9am - 10am', subject: 'Biology', class: '10th' },
-        ],
-      },
-      {
-        day: 'Wednesday',
-        classes: [
-          { time: '8am - 9am', subject: 'English', class: '10th' },
-          { time: '9am - 10am', subject: 'Mathematics', class: '10th' },
-        ],
-      },
-      {
-        day: 'Thursday',
-        classes: [
-          { time: '8am - 9am', subject: 'Physics', class: '10th' },
-          { time: '9am - 10am', subject: 'Chemistry', class: '10th' },
-        ],
-      },
-      {
-        day: 'Friday',
-        classes: [
-          { time: '8am - 9am', subject: 'Biology', class: '10th' },
-          { time: '9am - 10am', subject: 'English', class: '10th' },
-        ],
-      }, 
-    ],
-    profileImage: require('../assets/image/profile.png'),
+const ProfileScreen = ({navigation}) => {
+  const [teacher, setTeacher] = useState(null);
+
+  useEffect(() => {
+    fetchTeacher();
+  }, []);
+
+  const fetchTeacher = async () => {
+    try {
+      const teacherId = await AsyncStorage.getItem('teacherId'); // Retrieve teacherId from AsyncStorage
+      if (!teacherId) {
+        console.error('Teacher ID not found in AsyncStorage');
+        return;
+      }
+
+      const response = await fetch(apiList.getTeacherById(teacherId));
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setTeacher(data);
+    } catch (error) {
+      console.error('Error fetching teacher details:', error);
+    }
   };
 
   const navigateToCommunicationScreen = () => {
@@ -59,46 +49,67 @@ const ProfileScreen = ({ navigation }) => {
     navigation.navigate('Welcome');
   };
 
+  if (!teacher) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headingTextContainer}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}>
             <Icon name="chevron-back" size={0.075 * width} color="#6495ed" />
           </TouchableOpacity>
           <Text style={styles.headerText}>Profile</Text>
         </View>
-        <TouchableOpacity onPress={navigateToCommunicationScreen} style={styles.notification}>
-          <Icon name="notifications-outline" size={0.075 * width} color="#6495ed" />
+        <TouchableOpacity
+          onPress={navigateToCommunicationScreen}
+          style={styles.notification}>
+          <Icon
+            name="notifications-outline"
+            size={0.075 * width}
+            color="#6495ed"
+          />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.profileContainer}>
-          <Image source={profile.profileImage} style={styles.profileImage} />
-          <Text style={styles.name}>{profile.name}</Text>
+          <Image source={{uri: teacher.profile}} style={styles.profileImage} />
+          <Text style={styles.name}>{teacher.name}</Text>
           <Text style={styles.detail}>
-            <Text style={styles.boldText}>Subjects Taught:</Text> {profile.subjectsTaught.join(', ')}
+            <Text style={styles.boldText}>Subjects Taught:</Text>{' '}
+            {teacher.teachSubjects.join(', ')}
           </Text>
           <Text style={styles.detail}>
-            <Text style={styles.boldText}>Contact Info:</Text> {profile.contactInfo}
+            <Text style={styles.boldText}>Contact Info:</Text> {teacher.contact}
           </Text>
           <Text style={styles.detail}>
-            <Text style={styles.boldText}>Qualification:</Text> {profile.qualification}
+            <Text style={styles.boldText}>Qualification:</Text>{' '}
+            {teacher.qualification}
           </Text>
           <Text style={styles.detail}>
-            <Text style={styles.boldText}>Experience:</Text> {profile.experience}
+            <Text style={styles.boldText}>Experience:</Text>{' '}
+            {teacher.experience}
           </Text>
           <Text style={styles.sectionTitle}>Weekly Timetable</Text>
           <View style={styles.timetableContainer}>
-            {profile.timetable.map((entry, index) => (
+            {teacher.timetable.map((entry, index) => (
               <View key={index} style={styles.timetableEntry}>
                 <Text style={styles.timetableDay}>{entry.day}:</Text>
-                {entry.classes.map((cls, idx) => (
+                {entry.periods.map((period, idx) => (
                   <View key={idx} style={styles.classEntry}>
-                    <Text style={styles.classTime}>{cls.time}</Text>
+                    <Text style={styles.classTime}>
+                      {period.startTime} - {period.endTime}
+                    </Text>
                     <Text style={styles.classDetail}>
-                      {cls.subject} ({cls.class})
+                      {period.subject.name} ({period.class.name})
                     </Text>
                   </View>
                 ))}
@@ -107,8 +118,8 @@ const ProfileScreen = ({ navigation }) => {
           </View>
         </View>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
-      </TouchableOpacity>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -150,7 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 0.025 * width,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 0.05 * width },
+    shadowOffset: {width: 0, height: 0.05 * width},
     shadowOpacity: 0.2,
     shadowRadius: 0.05 * width,
     elevation: 3,
@@ -214,7 +225,7 @@ const styles = StyleSheet.create({
     borderRadius: 0.02 * width,
     marginBottom: 0.02 * width,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 0.05 * width },
+    shadowOffset: {width: 0, height: 0.05 * width},
     shadowOpacity: 0.2,
     shadowRadius: 0.05 * width,
     elevation: 1,
@@ -236,7 +247,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: '#ddd',
-    borderRadius : 10,
+    borderRadius: 10,
   },
   logoutButtonText: {
     fontSize: 0.05 * width,

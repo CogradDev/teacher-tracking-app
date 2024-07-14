@@ -15,49 +15,10 @@ import {
 } from 'react-native';
 import { SelectList } from 'react-native-dropdown-select-list';
 import Icon from 'react-native-vector-icons/Ionicons';
+import apiList from '../services/api';
+
 const { width } = Dimensions.get('window');
 
-const studentsData = [
-  {
-    name: 'Rakesh',
-    class: '1',
-    phoneNumber: '+918755695874',
-    pastFeedbacks: [
-      { date: '2024-07-01', purpose: 'Appreciation', summary: 'Great Progress' },
-      { date: '2024-06-25', purpose: 'Complaint', summary: 'Needs Improvement' },
-    ],
-    upcomingCalls: [
-      { date: '2024-07-10', purpose: 'Meeting' },
-      { date: '2024-07-15', purpose: 'Follow Up' },
-    ],
-  },
-  {
-    name: 'Mohini',
-    class: '2',
-    phoneNumber: '+918755695874',
-    pastFeedbacks: [
-      { date: '2024-07-01', purpose: 'Appreciation', summary: 'Great Progress' },
-      { date: '2024-06-25', purpose: 'Complaint', summary: 'Needs Improvement' },
-    ],
-    upcomingCalls: [
-      { date: '2024-07-10', purpose: 'Meeting' },
-      { date: '2024-07-15', purpose: 'Follow Up' },
-    ],
-  },
-  {
-    name: 'Mahima',
-    class: 'UKG',
-    phoneNumber: '+918755695874',
-    pastFeedbacks: [
-      { date: '2024-07-01', purpose: 'Appreciation', summary: 'Great Progress' },
-      { date: '2024-06-25', purpose: 'Complaint', summary: 'Needs Improvement' },
-    ],
-    upcomingCalls: [
-      { date: '2024-07-10', purpose: 'Meeting' },
-      { date: '2024-07-15', purpose: 'Follow Up' },
-    ],
-  },
-];
 
 const PerformanceMatricesScreen = ({ navigation }) => {
   const [studentValue, setStudentValue] = useState(null);
@@ -74,15 +35,44 @@ const PerformanceMatricesScreen = ({ navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedStudentDetails, setSelectedStudentDetails] = useState(null);
 
+  const [teacherId, setTeacherId] = useState('teacherId'); // Replace with actual teacher ID
+  const [schoolId, setSchoolId] = useState('schoolId'); // Replace with actual school ID
+
   useEffect(() => {
-    const uniqueClasses = Array.from(
-      new Set(studentsData.map((student) => student.class))
-    ).map((cls) => ({
-      label: cls,
-      value: cls,
-    }));
-    setClasses(uniqueClasses);
+    const Data = async () => {
+      const teacherData = await AsyncStorage.getItem('teacherData');
+      const parsedTeacherData = JSON.parse(teacherData);
+      setTeacherId(parsedTeacherData._id);
+      setSchoolId(parsedTeacherData.school);
+    };
+    Data();
   }, []);
+
+  useEffect(() => {
+    // Fetch classes from API
+    fetch(apiList.getClassList(schoolId))
+      .then((response) => response.json())
+      .then((data) => {
+        const classOptions = data.map((cls) => ({
+          label: cls.className,
+          value: cls._id, // Adjust based on your API response structure
+        }));
+        setClasses(classOptions);
+      })
+      .catch((error) => console.error('Error fetching classes:', error));
+  }, []);
+
+  const handleClassChange = (value) => {
+    setClassValue(value);
+    // Fetch students by class from API
+    fetch(apiList.getAllStudentByClass(value))
+      .then((response) => response.json())
+      .then((data) => {
+        setStudents(data); // Assuming data is an array of students
+        setStudentValue(null);
+      })
+      .catch((error) => console.error('Error fetching students:', error));
+  };
 
   const handleCallSubmission = () => {
     if (!studentValue || !purposeValue) {
@@ -95,19 +85,39 @@ const PerformanceMatricesScreen = ({ navigation }) => {
       purpose: purposes.find((p) => p.value === purposeValue)?.label || '',
       summary: newCallNotes,
     };
-    const updatedStudents = students.map((student) =>
-      student.name === studentValue
-        ? { ...student, pastFeedbacks: [...student.pastFeedbacks, newCall] }
-        : student
-    );
-    setStudents(updatedStudents);
-    setNewCallNotes('');
+
+    // Post new call data to API
+    fetch(apiList.createCall, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        studentId: studentValue,
+        time: currentDate, // Adjust as per your API requirements
+        teacherId: teacherId, // Replace with actual teacher ID
+      }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        const updatedStudents = students.map((student) =>
+          student._id === studentValue
+            ? {
+                ...student,
+                pastFeedbacks: [...student.pastFeedbacks, newCall],
+              }
+            : student
+        );
+        setStudents(updatedStudents);
+        setNewCallNotes('');
+      })
+      .catch((error) => console.error('Error creating call:', error));
   };
 
   const handleCall = (phoneNumber) => {
     const currentDate = new Date().toISOString().slice(0, 10);
     const updatedStudents = students.map((student) =>
-      student.name === studentValue
+      student._id === studentValue
         ? {
             ...student,
             pastFeedbacks: [
@@ -121,9 +131,14 @@ const PerformanceMatricesScreen = ({ navigation }) => {
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
+  const handleViewAllPastCalls = (student) => {
+    setSelectedStudentDetails(student);
+    setModalVisible(true);
+  };
+
   const renderStudentDetail = () => {
     if (!studentValue) return null;
-    const selectedStudent = students.find((s) => s.name === studentValue);
+    const selectedStudent = students.find((s) => s._id === studentValue);
     return (
       <View style={styles.studentDetailContainer}>
         <Text style={styles.label}>Phone Number</Text>
@@ -131,38 +146,24 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           <Text style={styles.phoneNumberText}>
             {selectedStudent?.phoneNumber}
           </Text>
-          <TouchableOpacity onPress={() => handleCall(selectedStudent?.phoneNumber)}>
-            <Icon name="call" size={24} color="#6495ed" style={styles.callIcon} />
+          <TouchableOpacity
+            onPress={() => handleCall(selectedStudent?.phoneNumber)}
+          >
+            <Icon
+              name="call"
+              size={24}
+              color="#6495ed"
+              style={styles.callIcon}
+            />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => handleViewAllPastCalls(selectedStudent)}>
+        <TouchableOpacity
+          onPress={() => handleViewAllPastCalls(selectedStudent)}
+        >
           <Text style={styles.viewDetailButton}>View All Past Calls</Text>
         </TouchableOpacity>
       </View>
     );
-  };
-
-  const handleViewAllPastCalls = (student) => {
-    setSelectedStudentDetails(student);
-    setModalVisible(true);
-  };
-
-  const handleClassChange = (value) => {
-    setClassValue(value);
-    const filteredStudents = studentsData.filter(
-      (student) => student.class === value
-    );
-    setStudents(filteredStudents);
-    setStudentValue(null);
-  };
-
-  const handleStudentSearch = (text) => {
-    const filteredStudents = studentsData.filter(
-      (student) =>
-        student.class === classValue &&
-        student.name?.toLowerCase().includes(text?.toLowerCase())
-    );
-    setStudents(filteredStudents);
   };
 
   return (
@@ -185,7 +186,9 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           <Text style={styles.headerText}>Performance Matrices</Text>
         </View>
 
-        <TouchableOpacity onPress={() => alert('Navigate to Notifications')}>
+        <TouchableOpacity
+          onPress={() => alert('Navigate to Notifications')}
+        >
           <Icon
             name="notifications-outline"
             size={30}
@@ -194,6 +197,7 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           />
         </TouchableOpacity>
       </View>
+
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Main Content */}
         <View style={styles.content}>
@@ -216,7 +220,7 @@ const PerformanceMatricesScreen = ({ navigation }) => {
               setSelected={setStudentValue}
               data={students.map((student) => ({
                 label: student.name,
-                value: student.name,
+                value: student._id,
               }))}
               save="value"
               placeholder="Select Student"
@@ -229,11 +233,13 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           {/* Past Feedbacks & Calls Section */}
           {studentValue && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Past Feedbacks & Calls</Text>
+              <Text style={styles.sectionTitle}>
+                Past Feedbacks & Calls
+              </Text>
               <FlatList
                 data={
-                  students.find((s) => s.name === studentValue)?.pastFeedbacks ||
-                  []
+                  students.find((s) => s._id === studentValue)
+                    ?.pastFeedbacks || []
                 }
                 keyExtractor={(item, index) => index.toString()}
                 renderItem={({ item }) => (
@@ -253,18 +259,19 @@ const PerformanceMatricesScreen = ({ navigation }) => {
               <Text style={styles.sectionTitle}>Upcoming Calls</Text>
               <FlatList
                 data={
-                  students.find((s) => s.name === studentValue)?.upcomingCalls ||
-                  []
+                  students.find((s) => s._id === studentValue)
+                    ?.upcomingCalls || []
                 }
                 keyExtractor={(item, index) => index.toString()}
                 renderItem={({ item }) => {
-                  // Calculate countdown dynamically
                   const calculateCountdown = () => {
                     const currentDate = new Date();
                     const targetDate = new Date(item.date);
                     const diffTime = Math.abs(targetDate - currentDate);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    return `${diffDays} days`; // Adjust format as needed
+                    const diffDays = Math.ceil(
+                      diffTime / (1000 * 60 * 60 * 24)
+                    );
+                    return `${diffDays} days`;
                   };
 
                   return (
@@ -279,57 +286,62 @@ const PerformanceMatricesScreen = ({ navigation }) => {
             </View>
           )}
 
-          {/* New Call Section */}
+          {/* New Call Form */}
           {studentValue && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>New Call</Text>
-              <View style={styles.dropdown}>
-                <SelectList
-                  setSelected={setPurposeValue}
-                  data={purposes}
-                  save="value"
-                  placeholder="Select Purpose"
-                  boxStyles={styles.dropdownBox}
-                />
+              <View style={styles.row}>
+                <View style={styles.dropdown}>
+                  <SelectList
+                    setSelected={setPurposeValue}
+                    data={purposes}
+                    save="value"
+                    placeholder="Select Purpose"
+                    boxStyles={styles.dropdownBox}
+                  />
+                </View>
               </View>
               <TextInput
-                style={styles.textArea}
-                placeholder="Enter summary for the call"
-                multiline
+                style={styles.input}
+                placeholder="Summary (optional)"
                 value={newCallNotes}
                 onChangeText={setNewCallNotes}
+                multiline
+                numberOfLines={4}
               />
               <TouchableOpacity
-                style={styles.submitButton}
+                style={styles.button}
                 onPress={handleCallSubmission}
               >
-                <Text style={styles.submitButtonText}>Submit</Text>
+                <Text style={styles.buttonText}>Submit Call</Text>
               </TouchableOpacity>
             </View>
           )}
-
-          {/* Render Student Details */}
-          {renderStudentDetail()}
         </View>
       </ScrollView>
 
-      {/* Past Calls Modal */}
-      {selectedStudentDetails && (
-        <Modal
-          visible={modalVisible}
-          animationType="slide"
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Past Calls for {selectedStudentDetails.name}</Text>
+      {/* Modal for Past Calls */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => {
+          setModalVisible(false);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Past Calls for {selectedStudentDetails?.name}
+            </Text>
             <FlatList
-              data={selectedStudentDetails.pastFeedbacks}
+              data={selectedStudentDetails?.pastCalls || []}
               keyExtractor={(item, index) => index.toString()}
               renderItem={({ item }) => (
-                <View style={styles.modalTableRow}>
-                  <Text style={styles.modalTableCell}>{item.date}</Text>
-                  <Text style={styles.modalTableCell}>{item.purpose}</Text>
-                  <Text style={styles.modalTableCell}>{item.summary}</Text>
+                <View style={styles.modalItem}>
+                  <Text style={styles.modalText}>{item.date}</Text>
+                  <Text style={styles.modalText}>{item.purpose}</Text>
+                  <Text style={styles.modalText}>{item.summary}</Text>
                 </View>
               )}
             />
@@ -337,11 +349,11 @@ const PerformanceMatricesScreen = ({ navigation }) => {
               style={styles.modalCloseButton}
               onPress={() => setModalVisible(false)}
             >
-              <Text style={styles.modalCloseButtonText}>Close</Text>
+              <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
           </View>
-        </Modal>
-      )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -349,85 +361,96 @@ const PerformanceMatricesScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    padding: 16,
+    backgroundColor: '#f0f0f0',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 0.04 * width,
-    paddingHorizontal: 0.025 * width,
     backgroundColor: '#fff',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
   },
   headingTextContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  backButton: {},
+  backButton: {
+    marginRight: 10,
+  },
   headerText: {
-    fontSize: 0.06 * width,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#6495ed',
   },
-  notification: {},
+  notification: {
+    marginLeft: 10,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    padding: 20,
+  },
   content: {
-    flex: 1,
+    marginBottom: 20,
   },
   label: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: '#6495ed',
+    fontSize: 18,
     fontWeight: 'bold',
+    marginVertical: 10,
   },
   dropdown: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   dropdownBox: {
-    borderColor: '#6495ed',
+    width: '100%',
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#6495ed',
+    marginBottom: 10,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 10,
+    fontSize: 16,
+    minHeight: 100,
+  },
+  button: {
+    backgroundColor: '#6495ed',
+    padding: 15,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   tableRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
+    borderBottomColor: '#ddd',
+    paddingVertical: 10,
   },
   tableCell: {
     flex: 1,
     textAlign: 'center',
-  },
-  textArea: {
-    borderWidth: 1,
-    borderColor: '#6495ed',
-    borderRadius: 4,
-    padding: 8,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    marginBottom: 16,
-  },
-  submitButton: {
-    backgroundColor: '#6495ed',
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
   },
   studentDetailContainer: {
     marginTop: 20,
@@ -435,52 +458,57 @@ const styles = StyleSheet.create({
   phoneNumberContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 10,
   },
   phoneNumberText: {
     fontSize: 16,
-    color: '#333',
+    marginRight: 10,
   },
   callIcon: {
     marginLeft: 10,
   },
   viewDetailButton: {
-    fontSize: 14,
     color: '#6495ed',
+    fontSize: 16,
+    textDecorationLine: 'underline',
+    marginTop: 10,
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: 'white',
-    padding: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 20,
+    width: width - 40,
+    maxHeight: '80%',
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#6495ed',
-    marginBottom: 16,
-  },
-  modalTableRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-  },
-  modalTableCell: {
-    flex: 1,
+    marginBottom: 10,
     textAlign: 'center',
   },
-  modalCloseButton: {
-    backgroundColor: '#6495ed',
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: 'center',
-    marginTop: 16,
+  modalItem: {
+    marginBottom: 10,
   },
-  modalCloseButtonText: {
-    color: '#fff',
+  modalText: {
     fontSize: 16,
+    marginBottom: 5,
+  },
+  modalCloseButton: {
+    marginTop: 20,
+    backgroundColor: '#6495ed',
+    padding: 15,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    color: '#fff',
+    fontSize: 18,
     fontWeight: 'bold',
   },
 });

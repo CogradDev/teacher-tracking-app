@@ -1,22 +1,50 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiList from '../services/api';
 
 const { width } = Dimensions.get('window');
 
 const CommunicationScreen = ({ navigation }) => {
-  // Example data for announcements and notifications
-  const announcements = [
-    { id: 1, title: 'Welcome back to school!', content: 'We are excited to welcome all students and staff back for the new academic year. Let’s make it a memorable and productive year ahead!' },
-    { id: 2, title: 'PTM Scheduled for next week', content: 'Parent-Teacher Meetings (PTMs) are scheduled for next week. Please check your child’s schedule for specific timings and details.' },
-    // Add more announcements as needed
-  ];
+  const [announcements, setAnnouncements] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
-  const notifications = [
-    { id: 1, title: 'Homework assigned for class 3B', content: 'Homework has been assigned for Class 3B for Mathematics and English. Please ensure completion by the due date.' },
-    { id: 2, title: 'New event added to calendar', content: 'A new event has been added to the school calendar. Stay tuned for more details and participation guidelines.' },
-    // Add more notifications as needed
-  ];
+  useEffect(() => {
+    const fetchTeacherData = async () => {
+      try {
+        const teacherData = await AsyncStorage.getItem('teacherData');
+        const parsedTeacherData = JSON.parse(teacherData);
+        const teacherId = parsedTeacherData._id;
+
+        fetchAnnouncements(teacherId);
+        fetchNotifications(teacherId);
+      } catch (error) {
+        console.error('Error fetching teacher data:', error);
+      }
+    };
+
+    fetchTeacherData();
+  }, []);
+
+  const fetchAnnouncements = async (teacherId) => {
+    try {
+      const response = await axios.get(apiList.getAnnouncements(teacherId));
+      setAnnouncements(response.data);
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
+    }
+  };
+
+  const fetchNotifications = async (teacherId) => {
+    try {
+      const response = await axios.get(apiList.getNotifications(teacherId));
+      setNotifications(response.data);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -33,7 +61,7 @@ const CommunicationScreen = ({ navigation }) => {
           <Text style={styles.sectionTitle}>Announcements</Text>
         </View>
         {announcements.map((announcement) => (
-          <View key={announcement.id} style={styles.item}>
+          <View key={announcement._id} style={styles.item}>
             <Text style={styles.itemTitle}>{announcement.title}</Text>
             <Text style={styles.itemContent}>{announcement.content}</Text>
           </View>
@@ -46,7 +74,7 @@ const CommunicationScreen = ({ navigation }) => {
           <Text style={styles.sectionTitle}>Notifications</Text>
         </View>
         {notifications.map((notification) => (
-          <View key={notification.id} style={styles.item}>
+          <View key={notification._id} style={styles.item}>
             <Text style={styles.itemTitle}>{notification.title}</Text>
             <Text style={styles.itemContent}>{notification.content}</Text>
           </View>
@@ -75,6 +103,7 @@ const styles = StyleSheet.create({
     fontSize: 0.06 * width,
     fontWeight: 'bold',
     color: '#6495ed',
+    marginLeft: 0.02 * width,
   },
   section: {
     backgroundColor: '#fff',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,14 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
-import { RNCamera } from 'react-native-camera';
+import {useNavigation} from '@react-navigation/native';
+import {RNCamera} from 'react-native-camera';
 import Geolocation from '@react-native-community/geolocation';
 import axios from 'axios';
+import apiList from '../services/api';
 
-const { width } = Dimensions.get('window');
+const {width} = Dimensions.get('window');
+const baseURL = 'YOUR_BASE_URL'; // Replace with your base URL
 
 const HomeScreen = () => {
   const navigation = useNavigation();
@@ -25,7 +27,31 @@ const HomeScreen = () => {
   const [selfieCaptured, setSelfieCaptured] = useState(false);
   const [selfieData, setSelfieData] = useState(null);
   const [loginTime, setLoginTime] = useState(null);
-  const [teacherId, setTeacherId] = useState('teacher_id_placeholder'); // Replace with actual teacher ID
+  const [announcements, setAnnouncements] = useState([]);
+  const [teacherId, setTeacherId] = useState('teacherId');
+
+  useEffect(() => {
+    const Data = async () => {
+      const teacherData = await AsyncStorage.getItem('teacherData');
+      const parsedTeacherData = JSON.parse(teacherData);
+      setTeacherId(parsedTeacherData._id);
+      fetchAnnouncements(parsedTeacherData._id);
+    };
+
+    Data();
+  }, []);
+
+  const [arrangements, setArrangements] = useState([]);
+  const [classPeriods, setClassPeriods] = useState([]);
+
+  const fetchAnnouncements = async teacherId => {
+    try {
+      const response = await axios.get(apiList.getAnnouncements(teacherId));
+      setAnnouncements(response.data);
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
+    }
+  };
 
   useEffect(() => {
     const requestPermissions = async () => {
@@ -56,17 +82,24 @@ const HomeScreen = () => {
     requestPermissions();
   }, []);
 
+  useEffect(() => {
+    if (teacherId) {
+      fetchArrangements(teacherId);
+      fetchClassPeriods(teacherId);
+    }
+  }, [teacherId]);
+
   const captureSelfieAndLocation = () => {
     if (cameraRef) {
       cameraRef
-        .takePictureAsync({ quality: 0.5, base64: true })
+        .takePictureAsync({quality: 0.5, base64: true})
         .then(data => {
           setSelfieCaptured(true);
           setSelfieData(data.base64);
           Geolocation.getCurrentPosition(
             position => {
-              const { latitude, longitude } = position.coords;
-              setLocation({ latitude, longitude });
+              const {latitude, longitude} = position.coords;
+              setLocation({latitude, longitude});
               const loginTime = new Date().toISOString();
               setLoginTime(loginTime);
 
@@ -75,7 +108,7 @@ const HomeScreen = () => {
             error => {
               console.log(error);
             },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+            {enableHighAccuracy: true, timeout: 15000, maximumAge: 10000},
           );
         })
         .catch(error => {
@@ -85,9 +118,6 @@ const HomeScreen = () => {
   };
 
   const sendDataToServer = (selfie, latitude, longitude, loginTime) => {
-    const url = 'YOUR_SERVER_ENDPOINT'; // Replace with your server endpoint
-    const teacherId = 'teacher_id_placeholder'; // Replace with actual teacher ID
-
     const data = {
       teacherId,
       selfie,
@@ -96,13 +126,38 @@ const HomeScreen = () => {
       loginTime,
     };
 
-    axios
-      .post(url, data)
+    fetch(apiList.sendLoginTrack, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data), //for formated value use formatedValue
+    })
       .then(response => {
         console.log('Data sent successfully:', response.data);
       })
       .catch(error => {
         console.log('Error sending data:', error);
+      });
+  };
+
+  const fetchArrangements = teacherId => {
+    fetch(apiList.getArrangementClass(teacherId))
+      .then(response => {
+        setArrangements(response.data);
+      })
+      .catch(error => {
+        console.log('Error fetching arrangements:', error);
+      });
+  };
+
+  const fetchClassPeriods = teacherId => {
+    fetch(apiList.getClassPeriodByTeacher(teacherId))
+      .then(response => {
+        setClassPeriods(response.data);
+      })
+      .catch(error => {
+        console.log('Error fetching class periods:', error);
       });
   };
 
@@ -146,60 +201,53 @@ const HomeScreen = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Important Updates</Text>
-          <View style={[styles.card, styles.updateCard]}>
-            <Text style={styles.cardTitle}>New Announcement</Text>
-            <Text style={styles.cardDescriptionUrgent}>
-              There will be a staff meeting at 4:00 PM today. Attendance is
-              mandatory.
-            </Text>
-            <Text style={styles.cardDate}>Date: 03/07/2024</Text>
-          </View>
-          <View style={[styles.card, styles.updateCard]}>
-            <Text style={styles.cardTitle}>Event Update</Text>
-            <Text style={styles.cardDescriptionUrgent}>
-              The Science Fair has been rescheduled to 10:00 AM tomorrow. Please
-              prepare accordingly.
-            </Text>
-            <Text style={styles.cardDate}>Date: 03/07/2024</Text>
-          </View>
+          {announcements.map(announcement => (
+            <View
+              key={announcement._id}
+              style={[styles.card, styles.updateCard]}>
+              <Text style={styles.cardTitle}>{announcement.title}</Text>
+              <Text style={styles.cardDescriptionUrgent}>
+                {announcement.content}
+              </Text>
+            </View>
+          ))}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Arrangement Classes</Text>
-          <View style={[styles.card, styles.arrangementCard]}>
-            <Text style={styles.cardTitle}>9:00 AM - Math</Text>
-            <Text style={styles.cardDescriptionUrgent}>
-              Teacher Absent. Please move to Class 102 for this session.
-            </Text>
-            <Text style={styles.cardClass}>New Class: 102</Text>
-          </View>
-          <View style={[styles.card, styles.arrangementCard]}>
-            <Text style={styles.cardTitle}>10:00 AM - Science</Text>
-            <Text style={styles.cardDescriptionUrgent}>
-              Special Event. The class will be held in Class 204 instead of the
-              usual room.
-            </Text>
-            <Text style={styles.cardClass}>New Class: 204</Text>
-          </View>
+          {arrangements.map((arrangement, index) => (
+            <View key={index} style={[styles.card, styles.arrangementCard]}>
+              <Text
+                style={
+                  styles.cardTitle
+                }>{`${arrangement.date} - ${arrangement.subject}`}</Text>
+              <Text style={styles.cardDescriptionUrgent}>
+                {arrangement.arrangementReason}
+              </Text>
+              <Text
+                style={
+                  styles.cardClass
+                }>{`New Class: ${arrangement.class}`}</Text>
+            </View>
+          ))}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Daily Schedule</Text>
-          <View style={[styles.card, styles.scheduleCard]}>
-            <Text style={styles.cardTitle}>9:00 AM - Math</Text>
-            <Text style={styles.cardDescription}>Lesson: Algebra</Text>
-            <Text style={styles.cardClass}>Class: 101</Text>
-          </View>
-          <View style={[styles.card, styles.scheduleCard]}>
-            <Text style={styles.cardTitle}>10:00 AM - Science</Text>
-            <Text style={styles.cardDescription}>Lesson: Chemistry Lab</Text>
-            <Text style={styles.cardClass}>Class: 202</Text>
-          </View>
-          <View style={[styles.card, styles.scheduleCard]}>
-            <Text style={styles.cardTitle}>11:00 AM - English</Text>
-            <Text style={styles.cardDescription}>Lesson: Literature</Text>
-            <Text style={styles.cardClass}>Class: 303</Text>
-          </View>
+          {classPeriods.map((classPeriod, index) => (
+            <View key={index} style={[styles.card, styles.scheduleCard]}>
+              <Text
+                style={
+                  styles.cardTitle
+                }>{`${classPeriod.date} - ${classPeriod.subject}`}</Text>
+              <Text
+                style={
+                  styles.cardDescription
+                }>{`Lesson: ${classPeriod.tasks.join(', ')}`}</Text>
+              <Text
+                style={styles.cardClass}>{`Class: ${classPeriod.class}`}</Text>
+            </View>
+          ))}
         </View>
       </ScrollView>
     </View>
@@ -259,65 +307,58 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   welcomeImage: {
-    width: 0.45 * width,
-    height: 0.45 * width,
+    width: 0.5 * width,
+    height: 0.25 * width,
     resizeMode: 'contain',
   },
   section: {
-    marginBottom: 24,
-    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
+    backgroundColor: '#F3F4F6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#D1D5DB',
+    borderTopWidth: 1,
+    borderTopColor: '#D1D5DB',
   },
   sectionTitle: {
     fontSize: 0.05 * width,
     fontWeight: 'bold',
-    color: '#444',
-    marginBottom: 12,
-    borderBottomColor: '#6495ed',
-    borderBottomWidth: 1,
-    paddingBottom: 4,
+    color: '#6495ed',
+    marginBottom: 8,
   },
   card: {
-    backgroundColor: '#fff',
-    padding: 16,
     borderRadius: 8,
-    elevation: 2,
-    marginBottom: 16,
-  },
-  updateCard: {
-    borderLeftWidth: 5,
-    borderLeftColor: '#FFA500',
-  },
-  arrangementCard: {
-    borderLeftWidth: 5,
-    borderLeftColor: '#4CAF50',
-  },
-  scheduleCard: {
-    borderLeftWidth: 5,
-    borderLeftColor: '#6495ed',
+    padding: 16,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: {width: 0, height: 2},
   },
   cardTitle: {
     fontSize: 0.045 * width,
     fontWeight: 'bold',
+    marginBottom: 8,
     color: '#333',
-    marginBottom: 4,
   },
   cardDescription: {
-    fontSize: 0.038 * width,
-    color: '#555',
-    marginBottom: 4,
+    fontSize: 0.04 * width,
+    color: '#333',
   },
   cardDescriptionUrgent: {
-    fontSize: 0.038 * width,
-    color: '#f00',
-    marginBottom: 4,
+    fontSize: 0.04 * width,
+    color: '#ff0000',
+  },
+  cardClass: {
+    fontSize: 0.04 * width,
+    marginTop: 8,
+    color: '#333',
   },
   cardDate: {
     fontSize: 0.035 * width,
-    color: '#555',
-  },
-  cardClass: {
-    fontSize: 0.035 * width,
-    color: '#555',
+    marginTop: 8,
+    color: '#888',
   },
 });
 

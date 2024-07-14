@@ -10,101 +10,155 @@ import {
 } from 'react-native';
 import { SelectList } from 'react-native-dropdown-select-list';
 import Icon from 'react-native-vector-icons/Ionicons';
+import apiList from '../services/api';
 
 const { width } = Dimensions.get('window');
-
-const studentsData = {
-  1: [
-    { id: '1', name: 'Rahul Kumar', date: null, attendance: 'absent' },
-    { id: '2', name: 'Priya Singh', date: null, attendance: 'absent' },
-    { id: '3', name: 'Anjali Verma', date: null, attendance: 'absent' },
-    { id: '4', name: 'Suresh Sharma', date: null, attendance: 'absent' },
-    { id: '5', name: 'Neeta Gupta', date: null, attendance: 'absent' },
-  ],
-  2: [
-    { id: '1', name: 'Amit Shah', date: null, attendance: 'absent' },
-    { id: '2', name: 'Sita Ram', date: null, attendance: 'absent' },
-    { id: '3', name: 'Geeta Patel', date: null, attendance: 'absent' },
-    { id: '4', name: 'Vivek Singh', date: null, attendance: 'absent' },
-    { id: '5', name: 'Deepika Malhotra', date: null, attendance: 'absent' },
-  ],
-  3: [
-    { id: '1', name: 'Ravi Teja', date: null, attendance: 'absent' },
-    { id: '2', name: 'Kavita Rao', date: null, attendance: 'absent' },
-    { id: '3', name: 'Lakshmi Narayan', date: null, attendance: 'absent' },
-    { id: '4', name: 'Manish Gupta', date: null, attendance: 'absent' },
-    { id: '5', name: 'Pooja Sharma', date: null, attendance: 'absent' },
-  ],
-};
-
-const teacherClasses = ['1', '3']; // Replace with dynamic class data for the teacher
 
 const AttendanceScreen = ({ navigation }) => {
   const [selectedClass, setSelectedClass] = useState(null);
   const [students, setStudents] = useState([]);
-  const [attendance, setAttendance] = useState({});
   const [isClassTeacher, setIsClassTeacher] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString());
+  const [classOptions, setClassOptions] = useState([]);
+  const [teacherId, setTeacherId] = useState('teacherId'); // Replace with actual teacher ID
+  const [schoolId, setSchoolId] = useState('schoolId'); // Replace with actual school ID
+
+  useEffect(() => {
+    const Data = async () => {
+      const teacherData = await AsyncStorage.getItem('teacherData');
+      const parsedTeacherData = JSON.parse(teacherData);
+      setTeacherId(parsedTeacherData._id);
+      setSchoolId(parsedTeacherData.school);
+    };
+    Data();
+  }, []);
+
+  useEffect(() => {
+    fetchClassList();
+  }, []);
 
   useEffect(() => {
     if (selectedClass) {
-      if (teacherClasses.includes(selectedClass)) {
-        setStudents(studentsData[selectedClass]);
-        setIsClassTeacher(true);
-      } else {
-        setStudents([]);
-        setIsClassTeacher(false);
-      }
+      checkIfClassTeacher();
     }
   }, [selectedClass]);
 
-  const toggleAttendance = (id) => {
-    setStudents((prevStudents) =>
-      prevStudents.map((student) =>
-        student.id === id
-          ? {
-              ...student,
-              attendance:
-                student.attendance === 'present' ? 'absent' : 'present',
-              date: selectedDate,
-            }
-          : student
-      )
-    );
+  const fetchClassList = async () => {
+    try {
+      const response = await fetch(apiList.getClassList(schoolId));
+      const data = await response.json();
+      if (response.ok) {
+        setClassOptions(
+          data.map(c => ({ label: `Class ${c.className}`, value: c._id })),
+        );
+      } else {
+        Alert.alert('Error', data.message || 'Failed to fetch classes');
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to fetch classes');
+    }
   };
 
-  const handleSubmit = () => {
-    console.log('Attendance Submitted:', students);
-    Alert.alert(
-      'Attendance Submitted',
-      'Attendance has been successfully submitted!'
-    );
+  const checkIfClassTeacher = async () => {
+    try {
+      const response = await fetch(
+        apiList.checkClassTeacher(teacherId),
+      );
+      const data = await response.json();
+      setIsClassTeacher(
+        data.isClassTeacher && data.classTeacher.className === selectedClass,
+      );
+      if (
+        data.isClassTeacher &&
+        data.classTeacher.className === selectedClass
+      ) {
+        fetchStudents(selectedClass);
+      } else {
+        setStudents([]);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to verify class teacher');
+    }
   };
 
-  // Define your class options here
-  const classData = [
-    { label: 'Class 1', value: '1' },
-    { label: 'Class 2', value: '2' },
-    { label: 'Class 3', value: '3' },
-  ];
+  const fetchStudents = async className => {
+    try {
+      const response = await fetch(apiList(className));
+      const data = await response.json();
+      // Initialize attendance status for each student
+      const studentsWithAttendance = data.map(student => ({
+        ...student,
+        attendance: null, // Initially set to null or a default value
+      }));
+      setStudents(studentsWithAttendance);
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to fetch students');
+    }
+  };
+
+  const updateAttendanceStatus = async (studentId, status) => {
+    try {
+      const response = await fetch(apiList.updateAttendance(selectedDate), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentId,
+          status,
+          id: teacherId,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        // Update local state to reflect the change
+        setStudents(prevStudents =>
+          prevStudents.map(student =>
+            student._id === studentId ? { ...student, attendance: status } : student,
+          ),
+        );
+        Alert.alert('Success', data.message);
+      } else {
+        Alert.alert('Error', data.message || 'Failed to update attendance');
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to update attendance');
+    }
+  };
+
+  const handleSubmit = async () => {
+    // Handle submission of attendance data to the backend
+    // Example implementation
+    try {
+      const attendanceData = {
+        statuses: students.map(student => student.attendance),
+        date: selectedDate,
+        id: teacherId,
+        studentIds: students.map(student => student._id),
+      };
+      // Perform API call to submit attendanceData
+      // Example: await fetch('your_server_url/studentAttendance/mark', { ... });
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to submit attendance');
+    }
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headingTextContainer}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Icon name="chevron-back" size={0.075 * width} color="#6495ed" />
           </TouchableOpacity>
           <Text style={styles.headerText}>Attendance</Text>
         </View>
         <TouchableOpacity style={styles.notification}>
-          <Icon
-            name="notifications-outline"
-            size={0.075 * width}
-            color="#6495ed"
-          />
+          <Icon name="notifications-outline" size={0.075 * width} color="#6495ed" />
         </TouchableOpacity>
       </View>
 
@@ -114,27 +168,42 @@ const AttendanceScreen = ({ navigation }) => {
       <View style={styles.content}>
         <SelectList
           setSelected={setSelectedClass}
-          data={classData}
+          data={classOptions}
           placeholder="Select Class"
           boxStyles={styles.dropdown}
           inputStyles={styles.dropdownText}
         />
         {isClassTeacher ? (
           <ScrollView style={styles.studentsContainer}>
-            {students.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                onPress={() => toggleAttendance(item.id)}
-                style={styles.item}>
-                <Text style={styles.itemText}>{item.name}</Text>
-                <Text
-                  style={
-                    item.attendance === 'present'
-                      ? styles.present
-                      : styles.absent
-                  }>
-                  {item.attendance === 'present' ? 'Present' : 'Absent'}
-                </Text>
+            {students.map(student => (
+              <TouchableOpacity key={student._id} style={styles.studentItem}>
+                <Text style={styles.studentName}>{student.name}</Text>
+                <View style={styles.attendanceContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.attendanceButton,
+                      { backgroundColor: student.attendance === 'p' ? 'green' : '#ccc' },
+                    ]}
+                    onPress={() => updateAttendanceStatus(student._id, 'p')}>
+                    <Text style={styles.attendanceButtonText}>P</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.attendanceButton,
+                      { backgroundColor: student.attendance === 'a' ? 'red' : '#ccc' },
+                    ]}
+                    onPress={() => updateAttendanceStatus(student._id, 'a')}>
+                    <Text style={styles.attendanceButtonText}>A</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.attendanceButton,
+                      { backgroundColor: student.attendance === 'l' ? 'gray' : '#ccc' },
+                    ]}
+                    onPress={() => updateAttendanceStatus(student._id, 'l')}>
+                    <Text style={styles.attendanceButtonText}>L</Text>
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -188,56 +257,60 @@ const styles = StyleSheet.create({
   },
   dropdownText: {
     fontSize: 18,
-    color: '#333',
+    color: '#000',
+  },
+  dateContainer: {
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  dateText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   studentsContainer: {
-    flex: 1,
+    marginTop: 20,
   },
-  item: {
+  studentItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 15,
+    alignItems: 'center',
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#ccc',
   },
-  itemText: {
-    fontSize: 18,
+  studentName: {
+    fontSize: 16,
   },
-  present: {
-    color: 'green',
-    fontWeight: 'bold',
+  attendanceContainer: {
+    flexDirection: 'row',
   },
-  absent: {
-    color: 'red',
-    fontWeight: 'bold',
+  attendanceButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  attendanceButtonText: {
+    fontSize: 16,
+    color: '#fff',
   },
   notClassTeacher: {
-    fontSize: 18,
-    color: 'red',
     textAlign: 'center',
     marginTop: 20,
+    fontSize: 16,
   },
   submitButton: {
     backgroundColor: '#6495ed',
-    paddingVertical: 15,
+    borderRadius: 5,
+    paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 10,
-    marginHorizontal: 20,
-    marginBottom: 20,
+    marginTop: 20,
   },
   submitButtonText: {
+    color: '#fff',
     fontSize: 18,
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  dateContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  dateText: {
-    fontSize: 16,
     fontWeight: 'bold',
   },
 });
