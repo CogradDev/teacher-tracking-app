@@ -7,37 +7,102 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
-  AsyncStorage,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import apiList from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const {width} = Dimensions.get('window');
 
 const ProfileScreen = ({navigation}) => {
   const [teacher, setTeacher] = useState(null);
+  const [subjectNames, setSubjectNames] = useState([]);
+  const [timetableData, setTimetableData] = useState([]);
 
   useEffect(() => {
-    fetchTeacher();
+    const fetchData = async () => {
+      try {
+        const teacherData = await AsyncStorage.getItem('teacherData');
+        if (!teacherData) {
+          throw new Error('Teacher data not found');
+        }
+        const parsedTeacherData = JSON.parse(teacherData);
+        setTeacher(parsedTeacherData);
+
+        // Fetch subject names for each subject ID in teachSubjects
+        if (parsedTeacherData && parsedTeacherData.teachSubjects) {
+          const subjectIds = parsedTeacherData.teachSubjects;
+          const subjectNames = await Promise.all(
+            subjectIds.map(async subjectId => {
+              try {
+                const response = await fetch(apiList.getSubjectName(subjectId));
+                if (!response.ok) {
+                  throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = await response.json();
+                return data[0].subName; // Correctly access subName from the first object in the array
+              } catch (error) {
+                console.error('Error fetching subject details:', error);
+                return null;
+              }
+            }),
+          );
+
+          // Remove duplicates from subjectNames array
+          const uniqueSubjectNames = Array.from(new Set(subjectNames));
+          setSubjectNames(uniqueSubjectNames);
+        }
+
+        // Fetch timetable data
+        if (parsedTeacherData && parsedTeacherData.timetable) {
+          const updatedTimetable = await Promise.all(
+            parsedTeacherData.timetable.map(async entry => {
+              const updatedPeriods = await Promise.all(
+                entry.periods.map(async period => {
+                  const subjectName = await fetchSubject(period.subject);
+                  const className = await fetchClass(period.class);
+                  return {
+                    ...period,
+                    subjectName,
+                    className,
+                  };
+                }),
+              );
+              return {
+                ...entry,
+                periods: updatedPeriods,
+              };
+            }),
+          );
+          setTimetableData(updatedTimetable);
+        }
+      } catch (error) {
+        console.error('Error fetching teacher data:', error);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  const fetchTeacher = async () => {
+  const fetchSubject = async subjectId => {
     try {
-      const teacherId = await AsyncStorage.getItem('teacherId'); // Retrieve teacherId from AsyncStorage
-      if (!teacherId) {
-        console.error('Teacher ID not found in AsyncStorage');
-        return;
-      }
-
-      const response = await fetch(apiList.getTeacherById(teacherId));
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
+      const response = await fetch(apiList.getSubjectName(subjectId));
       const data = await response.json();
-      setTeacher(data);
+      return data[0].subName;
     } catch (error) {
-      console.error('Error fetching teacher details:', error);
+      console.error('Failed to fetch subject:', error);
+      return null;
+    }
+  };
+
+  const fetchClass = async classId => {
+    try {
+      const response = await fetch(apiList.getClassName(classId));
+      const data = await response.json();
+      return data.className;
+    } catch (error) {
+      console.error('Failed to fetch class:', error);
+      return null;
     }
   };
 
@@ -85,7 +150,7 @@ const ProfileScreen = ({navigation}) => {
           <Text style={styles.name}>{teacher.name}</Text>
           <Text style={styles.detail}>
             <Text style={styles.boldText}>Subjects Taught:</Text>{' '}
-            {teacher.teachSubjects.join(', ')}
+            {subjectNames.join(', ')}
           </Text>
           <Text style={styles.detail}>
             <Text style={styles.boldText}>Contact Info:</Text> {teacher.contact}
@@ -100,7 +165,7 @@ const ProfileScreen = ({navigation}) => {
           </Text>
           <Text style={styles.sectionTitle}>Weekly Timetable</Text>
           <View style={styles.timetableContainer}>
-            {teacher.timetable.map((entry, index) => (
+            {timetableData.map((entry, index) => (
               <View key={index} style={styles.timetableEntry}>
                 <Text style={styles.timetableDay}>{entry.day}:</Text>
                 {entry.periods.map((period, idx) => (
@@ -109,7 +174,7 @@ const ProfileScreen = ({navigation}) => {
                       {period.startTime} - {period.endTime}
                     </Text>
                     <Text style={styles.classDetail}>
-                      {period.subject.name} ({period.class.name})
+                      {period.subjectName} ({period.className})
                     </Text>
                   </View>
                 ))}

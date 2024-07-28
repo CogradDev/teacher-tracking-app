@@ -14,11 +14,10 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import {useNavigation} from '@react-navigation/native';
 import {RNCamera} from 'react-native-camera';
 import Geolocation from '@react-native-community/geolocation';
-import axios from 'axios';
 import apiList from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const {width} = Dimensions.get('window');
-const baseURL = 'YOUR_BASE_URL'; // Replace with your base URL
 
 const HomeScreen = () => {
   const navigation = useNavigation();
@@ -29,12 +28,14 @@ const HomeScreen = () => {
   const [loginTime, setLoginTime] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [teacherId, setTeacherId] = useState('teacherId');
+  const [teacherName, setTeacherName] = useState('');
 
   useEffect(() => {
     const Data = async () => {
       const teacherData = await AsyncStorage.getItem('teacherData');
       const parsedTeacherData = JSON.parse(teacherData);
       setTeacherId(parsedTeacherData._id);
+      setTeacherName(parsedTeacherData.name);
       fetchAnnouncements(parsedTeacherData._id);
     };
 
@@ -46,8 +47,9 @@ const HomeScreen = () => {
 
   const fetchAnnouncements = async teacherId => {
     try {
-      const response = await axios.get(apiList.getAnnouncements(teacherId));
-      setAnnouncements(response.data);
+      const response = await fetch(apiList.getAnnouncements(teacherId));
+      const data = await response.json();
+      setAnnouncements(data);
     } catch (error) {
       console.error('Error fetching announcements:', error);
     }
@@ -134,37 +136,55 @@ const HomeScreen = () => {
       body: JSON.stringify(data), //for formated value use formatedValue
     })
       .then(response => {
-        console.log('Data sent successfully:', response.data);
+        console.log('Data sent successfully:', response);
       })
       .catch(error => {
         console.log('Error sending data:', error);
       });
   };
 
-  const fetchArrangements = teacherId => {
-    fetch(apiList.getArrangementClass(teacherId))
-      .then(response => {
-        setArrangements(response.data);
-      })
-      .catch(error => {
-        console.log('Error fetching arrangements:', error);
-      });
+  const fetchArrangements = async teacherId => {
+    try {
+      const response = await fetch(apiList.getArrangementClass(teacherId));
+
+      if (response.ok) {
+        const data = await response.json();
+        setArrangements(data); // Assuming data is an array
+      } else {
+        console.error('Failed to fetch arrangements:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching arrangements:', error);
+    }
   };
 
-  const fetchClassPeriods = teacherId => {
-    fetch(apiList.getClassPeriodByTeacher(teacherId))
-      .then(response => {
-        setClassPeriods(response.data);
-      })
-      .catch(error => {
-        console.log('Error fetching class periods:', error);
-      });
+  const fetchClassPeriods = async teacherId => {
+    try {
+      const response = await fetch(apiList.getClassPeriodByTeacher(teacherId));
+      if (response.ok) {
+        const data = await response.json();
+        setClassPeriods(data); // Assuming data is an array
+      } else {
+        console.error('Failed to fetch class periods:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching class periods:', error);
+    }
   };
 
   const navigateToCommunicationScreen = () => {
     navigation.navigate('Communication');
   };
 
+
+  const formattedTime = (time) =>{
+    const date = new Date(time);
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true
+    })
+  }
   return (
     <View style={styles.container}>
       {!selfieCaptured && (
@@ -191,7 +211,7 @@ const HomeScreen = () => {
         <View style={styles.welcomeContainer}>
           <View style={styles.welcomeTextContainer}>
             <Text style={styles.welcome}>Hi!</Text>
-            <Text style={styles.welcomeName}>Mrs. Radika</Text>
+            <Text style={styles.welcomeName}>{teacherName}</Text>
           </View>
           <Image
             source={require('../assets/image/Studying-bro.png')}
@@ -199,55 +219,64 @@ const HomeScreen = () => {
           />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Important Updates</Text>
-          {announcements.map(announcement => (
-            <View
-              key={announcement._id}
-              style={[styles.card, styles.updateCard]}>
-              <Text style={styles.cardTitle}>{announcement.title}</Text>
-              <Text style={styles.cardDescriptionUrgent}>
-                {announcement.content}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {announcements.length !== 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Important Updates</Text>
+            {announcements.map(announcement => (
+              <View
+                key={announcement._id}
+                style={[styles.card, styles.updateCard]}>
+                <Text style={styles.cardTitle}>{announcement.title}</Text>
+                <Text style={styles.cardDescriptionUrgent}>
+                  {announcement.content}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Arrangement Classes</Text>
-          {arrangements.map((arrangement, index) => (
-            <View key={index} style={[styles.card, styles.arrangementCard]}>
-              <Text
-                style={
-                  styles.cardTitle
-                }>{`${arrangement.date} - ${arrangement.subject}`}</Text>
-              <Text style={styles.cardDescriptionUrgent}>
-                {arrangement.arrangementReason}
-              </Text>
-              <Text
-                style={
-                  styles.cardClass
-                }>{`New Class: ${arrangement.class}`}</Text>
-            </View>
-          ))}
+          {arrangements.length === 0 ? (
+            <Text style={styles.noDataText}>No arrangement classes today.</Text>
+          ) : (
+            arrangements.map((arrangement, index) => (
+              <View key={index} style={[styles.card, styles.arrangementCard]}>
+                <Text
+                  style={
+                    styles.cardTitle
+                  }>{`${arrangement.date} - ${arrangement.subject}`}</Text>
+                <Text style={styles.cardDescriptionUrgent}>
+                  {arrangement.arrangementReason}
+                </Text>
+                <Text
+                  style={
+                    styles.cardClass
+                  }>{`New Class: ${arrangement.class}`}</Text>
+              </View>
+            ))
+          )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Daily Schedule</Text>
-          {classPeriods.map((classPeriod, index) => (
-            <View key={index} style={[styles.card, styles.scheduleCard]}>
-              <Text
-                style={
-                  styles.cardTitle
-                }>{`${classPeriod.date} - ${classPeriod.subject}`}</Text>
-              <Text
-                style={
-                  styles.cardDescription
-                }>{`Lesson: ${classPeriod.tasks.join(', ')}`}</Text>
-              <Text
-                style={styles.cardClass}>{`Class: ${classPeriod.class}`}</Text>
-            </View>
-          ))}
+          {classPeriods.length === 0 ? (
+            <Text style={styles.noDataText}>No classes today.</Text>
+          ) : (
+            classPeriods.map((classPeriod, index) => (
+              <View key={index} style={[styles.card, styles.scheduleCard]}>
+                <Text
+                  style={
+                    styles.cardTitle
+                  }>{`${formattedTime(classPeriod.date)} - ${classPeriod.subject}`}</Text>
+
+                <Text
+                  style={
+                    styles.cardClass
+                  }>{`Class: ${classPeriod.class}`}</Text>
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -307,58 +336,65 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   welcomeImage: {
-    width: 0.5 * width,
-    height: 0.25 * width,
+    width: 0.45 * width,
+    height: 0.45 * width,
     resizeMode: 'contain',
   },
   section: {
-    paddingVertical: 16,
-    paddingHorizontal: 10,
-    backgroundColor: '#F3F4F6',
-    borderBottomWidth: 1,
-    borderBottomColor: '#D1D5DB',
-    borderTopWidth: 1,
-    borderTopColor: '#D1D5DB',
+    marginBottom: 24,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 0.05 * width,
     fontWeight: 'bold',
-    color: '#6495ed',
-    marginBottom: 8,
+    color: '#444',
+    marginBottom: 12,
+    borderBottomColor: '#6495ed',
+    borderBottomWidth: 2,
+    paddingBottom: 4,
   },
   card: {
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
     backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: {width: 0, height: 2},
+    padding: 16,
+    borderRadius: 8,
+    elevation: 2,
+    marginBottom: 16,
+  },
+  updateCard: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#FFA500',
+  },
+  arrangementCard: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#4CAF50',
+  },
+  scheduleCard: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#6495ed',
   },
   cardTitle: {
     fontSize: 0.045 * width,
     fontWeight: 'bold',
-    marginBottom: 8,
     color: '#333',
+    marginBottom: 4,
   },
   cardDescription: {
-    fontSize: 0.04 * width,
-    color: '#333',
+    fontSize: 0.038 * width,
+    color: '#555',
+    marginBottom: 4,
   },
   cardDescriptionUrgent: {
-    fontSize: 0.04 * width,
-    color: '#ff0000',
-  },
-  cardClass: {
-    fontSize: 0.04 * width,
-    marginTop: 8,
-    color: '#333',
+    fontSize: 0.038 * width,
+    color: '#f00',
+    marginBottom: 4,
   },
   cardDate: {
     fontSize: 0.035 * width,
-    marginTop: 8,
-    color: '#888',
+    color: '#555',
+  },
+  cardClass: {
+    fontSize: 0.035 * width,
+    color: '#555',
   },
 });
 

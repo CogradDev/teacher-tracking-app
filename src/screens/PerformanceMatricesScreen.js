@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -13,30 +13,30 @@ import {
   Linking,
   Modal,
 } from 'react-native';
-import { SelectList } from 'react-native-dropdown-select-list';
+import {SelectList} from 'react-native-dropdown-select-list';
 import Icon from 'react-native-vector-icons/Ionicons';
 import apiList from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width } = Dimensions.get('window');
+const {width} = Dimensions.get('window');
 
-
-const PerformanceMatricesScreen = ({ navigation }) => {
+const PerformanceMatricesScreen = ({navigation}) => {
   const [studentValue, setStudentValue] = useState(null);
   const [students, setStudents] = useState([]);
   const [classValue, setClassValue] = useState(null);
   const [classes, setClasses] = useState([]);
   const [purposeValue, setPurposeValue] = useState(null);
   const [purposes, setPurposes] = useState([
-    { label: 'Appreciation', value: 'appreciation' },
-    { label: 'Complaint', value: 'complaint' },
-    { label: 'Follow Up', value: 'followup' },
+    {label: 'Appreciation', value: 'appreciation'},
+    {label: 'Complaint', value: 'complaint'},
+    {label: 'Follow Up', value: 'followup'},
   ]);
   const [newCallNotes, setNewCallNotes] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedStudentDetails, setSelectedStudentDetails] = useState(null);
 
-  const [teacherId, setTeacherId] = useState('teacherId'); // Replace with actual teacher ID
-  const [schoolId, setSchoolId] = useState('schoolId'); // Replace with actual school ID
+  const [teacherId, setTeacherId] = useState(''); // Replace with actual teacher ID
+  const [schoolId, setSchoolId] = useState(''); // Replace with actual school ID
 
   useEffect(() => {
     const Data = async () => {
@@ -49,29 +49,49 @@ const PerformanceMatricesScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-    // Fetch classes from API
-    fetch(apiList.getClassList(schoolId))
-      .then((response) => response.json())
-      .then((data) => {
-        const classOptions = data.map((cls) => ({
-          label: cls.className,
-          value: cls._id, // Adjust based on your API response structure
+    const fetchClasses = async () => {
+      try {
+        const response = await fetch(apiList.getClassList(schoolId));
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = await response.json();
+        const classOptions = data.map(cls => ({
+          id: cls._id,
+          value: cls.className,
         }));
         setClasses(classOptions);
-      })
-      .catch((error) => console.error('Error fetching classes:', error));
-  }, []);
+      } catch (error) {
+        console.error('Error fetching classes:', error);
+      }
+    };
 
-  const handleClassChange = (value) => {
-    setClassValue(value);
-    // Fetch students by class from API
-    fetch(apiList.getAllStudentByClass(value))
-      .then((response) => response.json())
-      .then((data) => {
-        setStudents(data); // Assuming data is an array of students
-        setStudentValue(null);
-      })
-      .catch((error) => console.error('Error fetching students:', error));
+    fetchClasses();
+  }, [schoolId]);
+
+  const handleClassChange = className => {
+    const selectedClass = classes.find(cls => cls.value === className);
+
+    if (selectedClass) {
+      const classId = selectedClass.id;
+      setClassValue(className);
+
+      // Fetch students by class from API using the class ID
+      fetch(apiList.getAllStudentByClass(classId))
+        .then(response => response.json())
+        .then(data => {
+          setStudents(data); // Assuming data is an array of students
+          setStudentValue(null);
+        })
+        .catch(error => console.error('Error fetching students:', error));
+    } else {
+      console.error('Class not found');
+    }
+  };
+
+  const handleStudentChange = StudentName => {
+    const student = students.find(stu => stu.name === StudentName);
+    setStudentValue(student._id);
   };
 
   const handleCallSubmission = () => {
@@ -82,7 +102,7 @@ const PerformanceMatricesScreen = ({ navigation }) => {
     const currentDate = new Date().toISOString().slice(0, 10);
     const newCall = {
       date: currentDate,
-      purpose: purposes.find((p) => p.value === purposeValue)?.label || '',
+      purpose: purposes.find(p => p.value === purposeValue)?.label || '',
       summary: newCallNotes,
     };
 
@@ -98,47 +118,47 @@ const PerformanceMatricesScreen = ({ navigation }) => {
         teacherId: teacherId, // Replace with actual teacher ID
       }),
     })
-      .then((response) => response.json())
-      .then((data) => {
-        const updatedStudents = students.map((student) =>
+      .then(response => response.json())
+      .then(data => {
+        const updatedStudents = students.map(student =>
           student._id === studentValue
             ? {
                 ...student,
                 pastFeedbacks: [...student.pastFeedbacks, newCall],
               }
-            : student
+            : student,
         );
         setStudents(updatedStudents);
         setNewCallNotes('');
       })
-      .catch((error) => console.error('Error creating call:', error));
+      .catch(error => console.error('Error creating call:', error));
   };
 
-  const handleCall = (phoneNumber) => {
+  const handleCall = phoneNumber => {
     const currentDate = new Date().toISOString().slice(0, 10);
-    const updatedStudents = students.map((student) =>
+    const updatedStudents = students.map(student =>
       student._id === studentValue
         ? {
             ...student,
             pastFeedbacks: [
               ...student.pastFeedbacks,
-              { date: currentDate, purpose: 'Call', summary: '' },
+              {date: currentDate, purpose: 'Call', summary: ''},
             ],
           }
-        : student
+        : student,
     );
     setStudents(updatedStudents);
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  const handleViewAllPastCalls = (student) => {
+  const handleViewAllPastCalls = student => {
     setSelectedStudentDetails(student);
     setModalVisible(true);
   };
 
   const renderStudentDetail = () => {
     if (!studentValue) return null;
-    const selectedStudent = students.find((s) => s._id === studentValue);
+    const selectedStudent = students.find(s => s._id === studentValue);
     return (
       <View style={styles.studentDetailContainer}>
         <Text style={styles.label}>Phone Number</Text>
@@ -147,8 +167,7 @@ const PerformanceMatricesScreen = ({ navigation }) => {
             {selectedStudent?.phoneNumber}
           </Text>
           <TouchableOpacity
-            onPress={() => handleCall(selectedStudent?.phoneNumber)}
-          >
+            onPress={() => handleCall(selectedStudent?.phoneNumber)}>
             <Icon
               name="call"
               size={24}
@@ -158,20 +177,21 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
         <TouchableOpacity
-          onPress={() => handleViewAllPastCalls(selectedStudent)}
-        >
+          onPress={() => handleViewAllPastCalls(selectedStudent)}>
           <Text style={styles.viewDetailButton}>View All Past Calls</Text>
         </TouchableOpacity>
       </View>
     );
   };
 
+  const navigateToCommunicationScreen = () => {
+    navigation.navigate('Communication');
+  };
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    >
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
       {/* Header Section */}
       <View style={styles.header}>
         <View style={styles.headingTextContainer}>
@@ -186,9 +206,7 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           <Text style={styles.headerText}>Performance Matrices</Text>
         </View>
 
-        <TouchableOpacity
-          onPress={() => alert('Navigate to Notifications')}
-        >
+        <TouchableOpacity onPress={navigateToCommunicationScreen}>
           <Icon
             name="notifications-outline"
             size={30}
@@ -217,10 +235,9 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           <Text style={styles.label}>Select Student</Text>
           <View style={styles.dropdown}>
             <SelectList
-              setSelected={setStudentValue}
-              data={students.map((student) => ({
-                label: student.name,
-                value: student._id,
+              setSelected={handleStudentChange}
+              data={students.map(student => ({
+                value: student.name,
               }))}
               save="value"
               placeholder="Select Student"
@@ -233,23 +250,26 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           {/* Past Feedbacks & Calls Section */}
           {studentValue && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                Past Feedbacks & Calls
-              </Text>
-              <FlatList
-                data={
-                  students.find((s) => s._id === studentValue)
-                    ?.pastFeedbacks || []
-                }
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item }) => (
-                  <View style={styles.tableRow}>
-                    <Text style={styles.tableCell}>{item.date}</Text>
-                    <Text style={styles.tableCell}>{item.purpose}</Text>
-                    <Text style={styles.tableCell}>{item.summary}</Text>
-                  </View>
-                )}
-              />
+              <Text style={styles.sectionTitle}>Past Feedbacks & Calls</Text>
+              {students.find(s => s._id === studentValue)?.pastFeedbacks
+                ?.length === 0 ? (
+                <Text>No past feedbacks or calls available.</Text>
+              ) : (
+                <FlatList
+                  data={
+                    students.find(s => s._id === studentValue)?.pastFeedbacks ||
+                    []
+                  }
+                  keyExtractor={(item, index) => index.toString()}
+                  renderItem={({item}) => (
+                    <View style={styles.tableRow}>
+                      <Text style={styles.tableCell}>{item.date}</Text>
+                      <Text style={styles.tableCell}>{item.purpose}</Text>
+                      <Text style={styles.tableCell}>{item.summary}</Text>
+                    </View>
+                  )}
+                />
+              )}
             </View>
           )}
 
@@ -257,32 +277,39 @@ const PerformanceMatricesScreen = ({ navigation }) => {
           {studentValue && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Upcoming Calls</Text>
-              <FlatList
-                data={
-                  students.find((s) => s._id === studentValue)
-                    ?.upcomingCalls || []
-                }
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item }) => {
-                  const calculateCountdown = () => {
-                    const currentDate = new Date();
-                    const targetDate = new Date(item.date);
-                    const diffTime = Math.abs(targetDate - currentDate);
-                    const diffDays = Math.ceil(
-                      diffTime / (1000 * 60 * 60 * 24)
-                    );
-                    return `${diffDays} days`;
-                  };
+              {students.find(s => s._id === studentValue)?.upcomingCalls
+                ?.length > 0 ? (
+                <FlatList
+                  data={
+                    students.find(s => s._id === studentValue)?.upcomingCalls ||
+                    []
+                  }
+                  keyExtractor={(item, index) => index.toString()}
+                  renderItem={({item}) => {
+                    const calculateCountdown = () => {
+                      const currentDate = new Date();
+                      const targetDate = new Date(item.date);
+                      const diffTime = Math.abs(targetDate - currentDate);
+                      const diffDays = Math.ceil(
+                        diffTime / (1000 * 60 * 60 * 24),
+                      );
+                      return `${diffDays} days`;
+                    };
 
-                  return (
-                    <View style={styles.tableRow}>
-                      <Text style={styles.tableCell}>{item.date}</Text>
-                      <Text style={styles.tableCell}>{item.purpose}</Text>
-                      <Text style={styles.tableCell}>{calculateCountdown()}</Text>
-                    </View>
-                  );
-                }}
-              />
+                    return (
+                      <View style={styles.tableRow}>
+                        <Text style={styles.tableCell}>{item.date}</Text>
+                        <Text style={styles.tableCell}>{item.purpose}</Text>
+                        <Text style={styles.tableCell}>
+                          {calculateCountdown()}
+                        </Text>
+                      </View>
+                    );
+                  }}
+                />
+              ) : (
+                <Text>No upcoming calls scheduled.</Text>
+              )}
             </View>
           )}
 
@@ -311,13 +338,13 @@ const PerformanceMatricesScreen = ({ navigation }) => {
               />
               <TouchableOpacity
                 style={styles.button}
-                onPress={handleCallSubmission}
-              >
+                onPress={handleCallSubmission}>
                 <Text style={styles.buttonText}>Submit Call</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
+        {renderStudentDetail()}
       </ScrollView>
 
       {/* Modal for Past Calls */}
@@ -327,28 +354,30 @@ const PerformanceMatricesScreen = ({ navigation }) => {
         visible={modalVisible}
         onRequestClose={() => {
           setModalVisible(false);
-        }}
-      >
+        }}>
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               Past Calls for {selectedStudentDetails?.name}
             </Text>
-            <FlatList
-              data={selectedStudentDetails?.pastCalls || []}
-              keyExtractor={(item, index) => index.toString()}
-              renderItem={({ item }) => (
-                <View style={styles.modalItem}>
-                  <Text style={styles.modalText}>{item.date}</Text>
-                  <Text style={styles.modalText}>{item.purpose}</Text>
-                  <Text style={styles.modalText}>{item.summary}</Text>
-                </View>
-              )}
-            />
+            {selectedStudentDetails?.pastCalls?.length > 0 ? (
+              <FlatList
+                data={selectedStudentDetails?.pastCalls || []}
+                keyExtractor={(item, index) => index.toString()}
+                renderItem={({item}) => (
+                  <View style={styles.modalItem}>
+                    <Text style={styles.modalText}>{item.date}</Text>
+                    <Text style={styles.modalText}>{item.purpose}</Text>
+                    <Text style={styles.modalText}>{item.summary}</Text>
+                  </View>
+                )}
+              />
+            ) : (
+              <Text>No past calls available.</Text>
+            )}
             <TouchableOpacity
               style={styles.modalCloseButton}
-              onPress={() => setModalVisible(false)}
-            >
+              onPress={() => setModalVisible(false)}>
               <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -361,57 +390,88 @@ const PerformanceMatricesScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'white',
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 0.04 * width,
+    paddingHorizontal: 0.025 * width,
     backgroundColor: '#fff',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
   },
   headingTextContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  backButton: {
-    marginRight: 10,
-  },
+  backButton: {},
   headerText: {
-    fontSize: 20,
+    fontSize: 0.06 * width,
     fontWeight: 'bold',
     color: '#6495ed',
   },
-  notification: {
-    marginLeft: 10,
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    padding: 20,
-  },
+  notification: {},
   content: {
-    marginBottom: 20,
+    flex: 1,
   },
   label: {
-    fontSize: 18,
+    fontSize: 16,
+    marginBottom: 8,
+    color: '#6495ed',
     fontWeight: 'bold',
-    marginVertical: 10,
   },
   dropdown: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   dropdownBox: {
-    width: '100%',
+    borderColor: '#6495ed',
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 32,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 8,
+    color: '#6495ed',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  tableCell: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  textArea: {
+    borderWidth: 1,
+    borderColor: '#6495ed',
+    borderRadius: 4,
+    padding: 8,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  submitButton: {
+    backgroundColor: '#6495ed',
+    paddingVertical: 12,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  studentDetailContainer: {
+    marginTop: 20,
   },
   row: {
     flexDirection: 'row',
@@ -452,63 +512,55 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 16,
   },
-  studentDetailContainer: {
-    marginTop: 20,
-  },
   phoneNumberContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
   phoneNumberText: {
     fontSize: 16,
-    marginRight: 10,
+    color: '#333',
   },
   callIcon: {
     marginLeft: 10,
   },
   viewDetailButton: {
+    fontSize: 14,
     color: '#6495ed',
-    fontSize: 16,
-    textDecorationLine: 'underline',
-    marginTop: 10,
   },
   modalContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
-    width: width - 40,
-    maxHeight: '80%',
+    backgroundColor: 'white',
+    padding: 16,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10,
+    color: '#6495ed',
+    marginBottom: 16,
+  },
+  modalTableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  modalTableCell: {
+    flex: 1,
     textAlign: 'center',
   },
-  modalItem: {
-    marginBottom: 10,
-  },
-  modalText: {
-    fontSize: 16,
-    marginBottom: 5,
-  },
   modalCloseButton: {
-    marginTop: 20,
     backgroundColor: '#6495ed',
-    padding: 15,
-    borderRadius: 5,
+    paddingVertical: 12,
+    borderRadius: 4,
     alignItems: 'center',
+    marginTop: 16,
   },
   modalCloseText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

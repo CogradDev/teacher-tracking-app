@@ -1,10 +1,5 @@
-import axios from 'axios';
-
-export const api = axios.create({
-  baseURL: 'http://localhost:4000',
-});
-
-const baseURL = 'http://localhost:4000';
+//const baseURL = 'http://192.168.243.165:8080';
+const baseURL = "https://cograd-erp-backend.onrender.com";
 
 const apiList = {
   login: `${baseURL}/teacher/app/login`,
@@ -20,7 +15,8 @@ const apiList = {
     `${baseURL}/student/studentList/${className}`,
 
   takeAttendance: `${baseURL}/studentAttendance/mark`,
-  updateAttendance: `${baseURL}/studentAttendance/update`,
+  updateAttendance: date=> `${baseURL}/studentAttendance/update/${date}`,
+  fetchStudentAttendanceByDateAndId: (studentId, date)=>`${baseURL}/studentAttendance/${studentId}/${date}`,
 
   getPastFeedback: studentId =>
     `${baseURL}/performance/feedback/past/${studentId}`,
@@ -36,9 +32,12 @@ const apiList = {
   updatePeriods: periodId => `${baseURL}/classPeriods/${periodId}`,
   getTasksByPeriods: periodId => `${baseURL}/tasks/task/${periodId}`,
   updateTask: taskId => `${baseURL}/tasks/task/${taskId}`,
+  updatePeriods: periodId => `${baseURL}/classPeriods/${periodId}`,
 
   sendLoginTrack : `${baseURL}/teacher/app/loginTrack`,
-  getArrangementClass: teacherId => `${baseURL}/classPeriods/teacher/${teacherId}`,
+  getArrangementClass: teacherId => `${baseURL}/classPeriods/arrangement/${teacherId}`,
+  getSubjectName: subjectId => `${baseURL}/subject/${subjectId}`,
+  getClassName: classId => `${baseURL}/class/classDetail/${classId}`
 };
 
 export default apiList;

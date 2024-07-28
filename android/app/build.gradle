@@ -82,7 +82,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
-          missingDimensionStrategy 'react-native-camera', 'general' // or 'mlkit'
+        missingDimensionStrategy 'react-native-camera', 'general' // or 'mlkit'
+        // Enable Proguard to shrink and obfuscate the code
+        proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
     }
     signingConfigs {
         debug {
@@ -91,6 +93,13 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release{
+             storeFile file('../../my-release-key.keystore')
+            storePassword 'Sumit210@'
+            keyAlias 'my-key-alias'
+            keyPassword 'Sumit210@'
+        }
+        
     }
     buildTypes {
         debug {
@@ -99,9 +108,11 @@ android {
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            //signingConfig signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // Sign the APK with the release key
+            signingConfig signingConfigs.release
         }
     }
 }

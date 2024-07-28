@@ -60,12 +60,16 @@ const CommunicationScreen = ({ navigation }) => {
           <Icon name="megaphone-outline" size={0.06 * width} color="#6495ed" style={styles.sectionIcon} />
           <Text style={styles.sectionTitle}>Announcements</Text>
         </View>
-        {announcements.map((announcement) => (
-          <View key={announcement._id} style={styles.item}>
-            <Text style={styles.itemTitle}>{announcement.title}</Text>
-            <Text style={styles.itemContent}>{announcement.content}</Text>
-          </View>
-        ))}
+        {announcements.length === 0 ? (
+          <Text style={styles.emptyText}>No announcements to display</Text>
+        ) : (
+          announcements.map((announcement) => (
+            <View key={announcement._id} style={styles.item}>
+              <Text style={styles.itemTitle}>{announcement.title}</Text>
+              <Text style={styles.itemContent}>{announcement.content}</Text>
+            </View>
+          ))
+        )}
       </View>
 
       <View style={styles.section}>
@@ -73,12 +77,16 @@ const CommunicationScreen = ({ navigation }) => {
           <Icon name="notifications-outline" size={0.06 * width} color="#6495ed" style={styles.sectionIcon} />
           <Text style={styles.sectionTitle}>Notifications</Text>
         </View>
-        {notifications.map((notification) => (
-          <View key={notification._id} style={styles.item}>
-            <Text style={styles.itemTitle}>{notification.title}</Text>
-            <Text style={styles.itemContent}>{notification.content}</Text>
-          </View>
-        ))}
+        {notifications.length === 0 ? (
+          <Text style={styles.emptyText}>No notifications to display</Text>
+        ) : (
+          notifications.map((notification) => (
+            <View key={notification._id} style={styles.item}>
+              <Text style={styles.itemTitle}>{notification.title}</Text>
+              <Text style={styles.itemContent}>{notification.content}</Text>
+            </View>
+          ))
+        )}
       </View>
     </ScrollView>
   );
@@ -103,7 +111,6 @@ const styles = StyleSheet.create({
     fontSize: 0.06 * width,
     fontWeight: 'bold',
     color: '#6495ed',
-    marginLeft: 0.02 * width,
   },
   section: {
     backgroundColor: '#fff',
@@ -146,6 +153,12 @@ const styles = StyleSheet.create({
     fontSize: 0.04 * width,
     color: '#666',
     marginTop: 0.0125 * width,
+  },
+  emptyText: {
+    alignSelf: 'center',
+    marginVertical: 0.05 * width,
+    fontSize: 0.045 * width,
+    color: '#999',
   },
 });
 

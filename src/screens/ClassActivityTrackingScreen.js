@@ -17,7 +17,6 @@ import {launchCamera} from 'react-native-image-picker';
 import moment from 'moment';
 import {SelectList} from 'react-native-dropdown-select-list';
 import {ScrollView} from 'react-native-gesture-handler';
-import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiList from '../services/api';
 
@@ -31,20 +30,28 @@ const ClassActivityTrackingScreen = ({navigation}) => {
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [tasksData, setTasksData] = useState({});
-  const [teacherID, setTeacherId] = useState('teacherId');
+  const [teacherID, setTeacherId] = useState('');
 
   useEffect(() => {
-    const Data = async () => {
-      const teacherData = await AsyncStorage.getItem('teacherData');
-      const parsedTeacherData = JSON.parse(teacherData);
-      setTeacherId(parsedTeacherData._id);
+    const fetchTeacherData = async () => {
+      try {
+        const teacherData = await AsyncStorage.getItem('teacherData');
+        if (teacherData) {
+          const parsedTeacherData = JSON.parse(teacherData);
+          setTeacherId(parsedTeacherData._id);
+        }
+      } catch (error) {
+        console.error('Error fetching teacher data:', error);
+      }
     };
-    Data();
+    fetchTeacherData();
   }, []);
 
   useEffect(() => {
-    fetchClassPeriodsByTeacher();
-  }, []);
+    if (teacherID) {
+      fetchClassPeriodsByTeacher(teacherID);
+    }
+  }, [teacherID]);
 
   useEffect(() => {
     if (classSelected) {
@@ -59,12 +66,12 @@ const ClassActivityTrackingScreen = ({navigation}) => {
     }
   }, [classSelected, tasksData]);
 
-  const fetchClassPeriodsByTeacher = async () => {
+  const fetchClassPeriodsByTeacher = async teacherID => {
     try {
-      const response = await axios.get(
-        apiList.getClassPeriodByTeacher(teacherID),
-      );
-      const periods = response.data.reduce((acc, period) => {
+      const response = await fetch(apiList.getClassPeriodByTeacher(teacherID));
+      const data = await response.json();
+
+      const periods = data.reduce((acc, period) => {
         if (!acc[period.class]) {
           acc[period.class] = {};
         }
@@ -95,7 +102,8 @@ const ClassActivityTrackingScreen = ({navigation}) => {
   const fetchTasksByPeriod = async periodId => {
     try {
       const response = await fetch(apiList.getTasksByPeriods(periodId));
-      const tasks = response.data.reduce((acc, task) => {
+      const data = await response.json(); // Ensure this is the correct response format
+      const tasks = data.reduce((acc, task) => {
         acc[task._id] = {
           description: task.title,
           status: task.status,
@@ -103,9 +111,16 @@ const ClassActivityTrackingScreen = ({navigation}) => {
         };
         return acc;
       }, {});
-      const updatedTasksData = {...tasksData};
-      updatedTasksData[classSelected][subjectSelected].tasks = tasks;
-      setTasksData(updatedTasksData);
+      setTasksData(prevTasksData => ({
+        ...prevTasksData,
+        [classSelected]: {
+          ...prevTasksData[classSelected],
+          [subjectSelected]: {
+            ...prevTasksData[classSelected][subjectSelected],
+            tasks: tasks,
+          },
+        },
+      }));
     } catch (error) {
       console.error('Error fetching tasks:', error);
       Alert.alert('Error', 'Failed to fetch tasks');
@@ -119,7 +134,6 @@ const ClassActivityTrackingScreen = ({navigation}) => {
     };
     launchCamera(options, response => {
       if (response.didCancel) {
-        console.log('User cancelled image picker');
       } else if (response.errorCode) {
         console.log('ImagePicker Error: ', response.errorCode);
       } else {
@@ -145,7 +159,6 @@ const ClassActivityTrackingScreen = ({navigation}) => {
           status: task.status,
         }),
       });
-      updatedTasksData[className][subjectName].attendance = true; // Mark attendance
       setTasksData(updatedTasksData);
     } catch (error) {
       console.error('Error updating task status:', error);
@@ -180,7 +193,7 @@ const ClassActivityTrackingScreen = ({navigation}) => {
   };
 
   const renderTask = ({item, index}) => {
-    const taskId = item._id;
+    const taskId = item.key;
     const task = item.task;
 
     return (
@@ -224,8 +237,11 @@ const ClassActivityTrackingScreen = ({navigation}) => {
 
   const canSubmit = () => {
     if (!classSelected || !subjectSelected) {
+      Alert.alert("Please complete")
       return false;
     }
+
+   
 
     const tasks = tasksData[classSelected][subjectSelected].tasks;
     const allTasksCompleted = Object.values(tasks).every(task => task.status);
@@ -236,17 +252,28 @@ const ClassActivityTrackingScreen = ({navigation}) => {
   const handleSubmit = async () => {
     if (canSubmit()) {
       try {
-        const updatedTasksData = {...tasksData};
-        const periodId =
-          updatedTasksData[classSelected][subjectSelected].periodId;
-
-        await axios.put(`${baseURL}/classPeriods/${periodId}`, {
-          status: true,
-          photos: photos.map(photo => photo.uri),
+        const periodId = tasksData[classSelected][subjectSelected].periodId;
+        await fetch(apiList.updatePeriods(periodId), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: true,
+            photos: photos.map(photo => photo.uri),
+          }),
         });
 
-        updatedTasksData[classSelected][subjectSelected].attendance = true;
-        setTasksData(updatedTasksData);
+        setTasksData(prevTasksData => ({
+          ...prevTasksData,
+          [classSelected]: {
+            ...prevTasksData[classSelected],
+            [subjectSelected]: {
+              ...prevTasksData[classSelected][subjectSelected],
+              attendance: true,
+            },
+          },
+        }));
         Alert.alert('Submitted!');
         setTasksVisible(false);
         setPhotos([]);
@@ -262,6 +289,9 @@ const ClassActivityTrackingScreen = ({navigation}) => {
     }
   };
 
+  const navigateToCommunicationScreen = () => {
+    navigation.navigate('Communication');
+  };
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -280,7 +310,7 @@ const ClassActivityTrackingScreen = ({navigation}) => {
           <Text style={styles.headerText}>Class Activity Tracking</Text>
         </View>
         <TouchableOpacity
-          onPress={() => navigation.navigate('CommunicationScreen')}>
+          onPress={navigateToCommunicationScreen}>
           <Icon
             name="notifications-outline"
             size={30}
@@ -306,35 +336,38 @@ const ClassActivityTrackingScreen = ({navigation}) => {
           placeholder="Select Subject"
           searchPlaceholder="Search Subject"
           boxStyles={styles.dropdownBox}
+          onSelect={() => toggleTasksVisibility()}
         />
       </View>
       {tasksVisible && (
-        <FlatList
-          data={taskItems}
-          renderItem={renderTask}
-          keyExtractor={item => item.key}
-          contentContainerStyle={styles.tasksList}
-        />
+        <React.Fragment>
+          <FlatList
+            data={taskItems}
+            renderItem={renderTask}
+            keyExtractor={item => item.key}
+            contentContainerStyle={styles.tasksList}
+          />
+          <ScrollView horizontal style={styles.photosContainer}>
+            {photos.map((photo, index) => (
+              <Image key={index} source={photo} style={styles.photo} />
+            ))}
+          </ScrollView>
+          <View style={styles.buttonsContainer}>
+            <TouchableOpacity
+              style={styles.cameraButton}
+              onPress={handleImagePicker}>
+              <Icon name="camera" size={24} color="#fff" />
+              <Text style={styles.cameraButtonText}>Take Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={handleSubmit}
+              disabled={!canSubmit()}>
+              <Text style={styles.submitButtonText}>Submit</Text>
+            </TouchableOpacity>
+          </View>
+        </React.Fragment>
       )}
-      <View style={styles.buttonsContainer}>
-        <TouchableOpacity
-          style={styles.cameraButton}
-          onPress={handleImagePicker}>
-          <Icon name="camera" size={24} color="#fff" />
-          <Text style={styles.cameraButtonText}>Take Photo</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.submitButton}
-          onPress={handleSubmit}
-          disabled={!canSubmit()}>
-          <Text style={styles.submitButtonText}>Submit</Text>
-        </TouchableOpacity>
-      </View>
-      <ScrollView horizontal style={styles.photosContainer}>
-        {photos.map((photo, index) => (
-          <Image key={index} source={photo} style={styles.photo} />
-        ))}
-      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
@@ -356,15 +389,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backButton: {
-    marginRight: 8,
   },
   headerText: {
-    fontSize: 20,
+    fontSize: 0.06 * width,
     fontWeight: 'bold',
     color: '#6495ed',
   },
   notification: {
-    marginRight: 8,
   },
   dateContainer: {
     alignItems: 'center',
@@ -450,7 +481,7 @@ const styles = StyleSheet.create({
   },
   photosContainer: {
     flexDirection: 'row',
-    marginTop: 16,
+    margin: 16,
   },
   photo: {
     width: width / 3 - 16,

@@ -13,12 +13,11 @@ import {
   Keyboard,
   ActivityIndicator,
   Alert,
+  PermissionsAndroid,
 } from 'react-native';
 import PhoneInput from 'react-native-phone-number-input';
 import {useDispatch} from 'react-redux';
-import {CommonActions} from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {check, request, PERMISSIONS, RESULTS} from 'react-native-permissions';
 import apiList from '../services/api';
 
 const {width, height} = Dimensions.get('window');
@@ -30,6 +29,26 @@ const LoginScreen = ({navigation}) => {
 
   const phoneInput = useRef(null);
   const dispatch = useDispatch();
+
+
+  const checkPermissions = async () => {
+    try {
+      const cameraGranted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.CAMERA
+      );
+      const locationGranted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+      const phoneStateGranted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE
+      );
+
+      return cameraGranted && locationGranted && phoneStateGranted;
+    } catch (error) {
+      console.log('Error checking permissions:', error);
+      return false;
+    }
+  };
 
   const handleLogin = async () => {
     if (formattedValue.trim() === '') {
@@ -47,18 +66,21 @@ const LoginScreen = ({navigation}) => {
         },
         body: JSON.stringify({ phoneNumber: value }), //for formated value use formatedValue
       });
-
-      const data = response.data;
-      console.log('Login response data:', data);
+      
+      const data = await response.json();
 
       if (response.status === 200) {
         // Save login status, credentials, and parent data to AsyncStorage
         await AsyncStorage.setItem('isLoggedIn', 'true');
         await AsyncStorage.setItem('phone', formattedValue);
         await AsyncStorage.setItem('teacherData', JSON.stringify(data));
+        const permissionsGranted = await checkPermissions();
 
-        // Check permissions
-        checkPermissions();
+        if (permissionsGranted) {
+          navigation.navigate('Main');
+        } else {
+          navigation.navigate('Permission');
+        }
       } else {
         Alert.alert('Error', 'Login failed. Please check your phone number.');
       }
@@ -70,40 +92,6 @@ const LoginScreen = ({navigation}) => {
     }
   };
 
-  const checkPermissions = async () => {
-    const permissions = [
-      PERMISSIONS.ANDROID.CAMERA,
-      PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION,
-      PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
-      PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
-      PERMISSIONS.ANDROID.CALL_PHONE,
-      PERMISSIONS.ANDROID.READ_CONTACTS,
-    ];
-
-    let allPermissionsGranted = true;
-
-    for (const permission of permissions) {
-      const result = await check(permission);
-      if (result !== RESULTS.GRANTED) {
-        const requestResult = await request(permission);
-        if (requestResult !== RESULTS.GRANTED) {
-          allPermissionsGranted = false;
-          break;
-        }
-      }
-    }
-
-    if (allPermissionsGranted) {
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{name: 'Home'}],
-        }),
-      );
-    } else {
-      navigation.navigate('Permission');
-    }
-  };
 
   return (
     <KeyboardAvoidingView

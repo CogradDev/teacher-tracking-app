@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,11 @@ import {
   PermissionsAndroid,
   Dimensions,
   Alert,
-  Linking,
 } from 'react-native';
 
-const {width} = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-const PermissionScreen = ({navigation}) => {
+const PermissionScreen = ({ navigation }) => {
   const [permissionsGranted, setPermissionsGranted] = useState(false);
 
   useEffect(() => {
@@ -22,29 +21,16 @@ const PermissionScreen = ({navigation}) => {
   const checkPermissions = async () => {
     try {
       const cameraGranted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.CAMERA,
+        PermissionsAndroid.PERMISSIONS.CAMERA
       );
       const locationGranted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      );
-      const readStorageGranted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-      );
-      const writeStorageGranted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
       );
       const phoneStateGranted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+        PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE
       );
 
-      if (
-        cameraGranted &&
-        locationGranted &&
-        microphoneGranted &&
-        readStorageGranted &&
-        writeStorageGranted &&
-        phoneStateGranted
-      ) {
+      if (cameraGranted && locationGranted && phoneStateGranted) {
         setPermissionsGranted(true);
         navigation.navigate('Main');
       } else {
@@ -60,26 +46,22 @@ const PermissionScreen = ({navigation}) => {
       const granted = await PermissionsAndroid.requestMultiple([
         PermissionsAndroid.PERMISSIONS.CAMERA,
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
         PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
       ]);
 
       console.log('Permission Results:', granted);
 
       const allPermissionsGranted = Object.values(granted).every(
-        status => status === PermissionsAndroid.RESULTS.GRANTED,
+        (status) => status === PermissionsAndroid.RESULTS.GRANTED
       );
 
       if (allPermissionsGranted) {
-        navigation.navigate('Home');
+        navigation.navigate('Main');
       } else {
-        // Alert.alert(
-        //   'Permissions Required',
-        //   'Please grant all the necessary permissions to proceed.',
-        // );
-        navigation.navigate('Home');
+        Alert.alert(
+          'Permissions Required',
+          'Please grant all the necessary permissions to proceed.'
+        );
       }
     } catch (error) {
       console.log('Error requesting permissions:', error);
@@ -98,12 +80,6 @@ const PermissionScreen = ({navigation}) => {
         </View>
         <View style={styles.row}>
           <Text style={styles.cell}>Location</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.cell}>Microphone</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.cell}>Storage</Text>
         </View>
         <View style={styles.row}>
           <Text style={styles.cell}>Phone</Text>
