@@ -1,4 +1,4 @@
-import React, {useState, useRef} from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,20 +16,29 @@ import {
   PermissionsAndroid,
 } from 'react-native';
 import PhoneInput from 'react-native-phone-number-input';
-import {useDispatch} from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CommonActions } from '@react-navigation/native';
 import apiList from '../services/api';
+import messaging from '@react-native-firebase/messaging';
+import { useTheme } from '../../ThemeContext';
 
-const {width, height} = Dimensions.get('window');
 
-const LoginScreen = ({navigation}) => {
+
+
+const { width, height } = Dimensions.get('window');
+
+const LoginScreen = ({ navigation }) => {
   const [value, setValue] = useState('');
   const [formattedValue, setFormattedValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const phoneInput = useRef(null);
-  const dispatch = useDispatch();
+  const {theme} = useTheme();
+  const styles = createStyles(theme);
 
+  const phoneInput = useRef(null);
+
+
+ 
 
   const checkPermissions = async () => {
     try {
@@ -43,20 +52,29 @@ const LoginScreen = ({navigation}) => {
         PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE
       );
 
-      return cameraGranted && locationGranted && phoneStateGranted;
+      const notificationGranted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      )
+
+      return cameraGranted && locationGranted && phoneStateGranted && notificationGranted;
     } catch (error) {
       console.log('Error checking permissions:', error);
       return false;
     }
   };
 
+  
   const handleLogin = async () => {
     if (formattedValue.trim() === '') {
       Alert.alert('Error', 'Please enter a valid phone number.');
       return;
     }
 
+
+    const token = await messaging().getToken();
+
     setIsLoading(true);
+
 
     try {
       const response = await fetch(apiList.login, {
@@ -64,22 +82,32 @@ const LoginScreen = ({navigation}) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ phoneNumber: value }), //for formated value use formatedValue
+        body: JSON.stringify({ phoneNumber: value, deviceToken: token}), //for formatted value use formattedValue
       });
-      
+
       const data = await response.json();
 
       if (response.status === 200) {
         // Save login status, credentials, and parent data to AsyncStorage
-        await AsyncStorage.setItem('isLoggedIn', 'true');
+        await AsyncStorage.setItem('isLoggedIn', "true");
         await AsyncStorage.setItem('phone', formattedValue);
         await AsyncStorage.setItem('teacherData', JSON.stringify(data));
         const permissionsGranted = await checkPermissions();
 
+        const resetAction = CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Main' }],
+        });
+
         if (permissionsGranted) {
-          navigation.navigate('Main');
+          navigation.dispatch(resetAction);
         } else {
-          navigation.navigate('Permission');
+          navigation.dispatch(
+            CommonActions.reset({
+              index: 0,
+              routes: [{ name: 'Permission' }],
+            })
+          );
         }
       } else {
         Alert.alert('Error', 'Login failed. Please check your phone number.');
@@ -91,7 +119,6 @@ const LoginScreen = ({navigation}) => {
       setIsLoading(false);
     }
   };
-
 
   return (
     <KeyboardAvoidingView
@@ -122,11 +149,14 @@ const LoginScreen = ({navigation}) => {
               withShadow
               containerStyle={styles.phoneInputContainer}
               textContainerStyle={styles.phoneInputTextContainer}
+              textInputProps={{
+                placeholderTextColor: theme.gray, 
+              }}
             />
 
             <TouchableOpacity style={styles.button} onPress={handleLogin}>
               {isLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={theme.white} />
               ) : (
                 <Text style={styles.buttonText}>Log In</Text>
               )}
@@ -138,10 +168,10 @@ const LoginScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = theme => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.white,
     paddingBottom: height * 0.02,
   },
   scrollContainer: {
@@ -166,7 +196,7 @@ const styles = StyleSheet.create({
   phoneInputContainer: {
     width: width * 0.8,
     borderWidth: 2,
-    borderColor: '#6495ed',
+    borderColor: theme.blue,
     borderRadius: 12,
     padding: width * 0.02,
     marginBottom: width * 0.03,
@@ -178,28 +208,28 @@ const styles = StyleSheet.create({
     width: width * 0.8,
     height: width * 0.15,
     borderWidth: 1,
-    borderColor: '#6495ed',
+    borderColor: theme.blue,
     borderRadius: 12,
     padding: width * 0.04,
     marginBottom: width * 0.03,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.white,
     fontSize: width * 0.03,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
+    shadowColor: theme.black,
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 5,
-    color: '#333',
+    color: theme.lightBlack,
   },
   button: {
-    backgroundColor: '#6495ed',
+    backgroundColor: theme.blue,
     paddingVertical: width * 0.04,
     borderRadius: 10,
     width: width * 0.8,
     marginBottom: width * 0.04,
   },
   buttonText: {
-    color: '#fff',
+    color: theme.white,
     fontSize: width * 0.04,
     fontWeight: 'bold',
     textAlign: 'center',

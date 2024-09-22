@@ -2,10 +2,15 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions } from 'react-native';
 import teacherImage from "../assets/image/Teacher-student-bro.png";
 import logo from "../assets/image/cograd-logo.png";
+import { useTheme } from '../../ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
 const WelcomeScreen = ({ navigation }) => {
+
+  const {theme} = useTheme();
+  const styles = createStyles(theme);
+
   const handleGetStarted = () => {
     navigation.navigate('Login');
   };
@@ -35,12 +40,12 @@ const WelcomeScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles =theme=> StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    backgroundColor: '#fff',
+    backgroundColor: theme.white,
     paddingBottom: height * 0.02, // Adjusted to be relative to height
   },
   logo: {
@@ -56,12 +61,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: width * 0.08,
     fontWeight: 'bold',
-    color: '#333',
+    color: theme.lightBlack,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: width * 0.06,
-    color: '#333',
+    color: theme.lightBlack,
     textAlign: 'center',
   },
   image: {
@@ -70,14 +75,14 @@ const styles = StyleSheet.create({
     marginBottom: width * 0.1,
   },
   button: {
-    backgroundColor: '#6495ed',
+    backgroundColor: theme.blue,
     paddingVertical: width * 0.03, // Made padding relative to width
     paddingHorizontal: width * 0.1,
     borderRadius: 5,
     marginBottom: height * 0.04,
   },
   buttonText: {
-    color: '#fff',
+    color: theme.white,
     fontSize: width * 0.05,
     textAlign: 'center',
   },

@@ -1,4 +1,4 @@
-//const baseURL = 'http://192.168.243.165:8080';
+//const baseURL = 'http://192.168.191.165:8080';
 const baseURL = "https://cograd-erp-backend.onrender.com";
 
 const apiList = {
@@ -6,8 +6,7 @@ const apiList = {
   getTeacherById: teacherId => `${baseURL}/teacher/getTeacherById/${teacherId}`,
   getNotifications: teacherId =>
     `${baseURL}/notifications/teacher/${teacherId}`,
-  getAnnouncements: teacherId =>
-    `${baseURL}/announcements/teacher/${teacherId}`,
+  getAnnouncements: `${baseURL}/announcements`,
 
   getClassList: schoolId => `${baseURL}/class/get/${schoolId}`,
   checkClassTeacher: teacherId => `${baseURL}/classTeacher/check/${teacherId}`,
@@ -18,26 +17,27 @@ const apiList = {
   updateAttendance: date=> `${baseURL}/studentAttendance/update/${date}`,
   fetchStudentAttendanceByDateAndId: (studentId, date)=>`${baseURL}/studentAttendance/${studentId}/${date}`,
 
-  getPastFeedback: studentId =>
-    `${baseURL}/performance/feedback/past/${studentId}`,
-  getUpcomingFeedback: studentId =>
-    `${baseURL}/performance/feedback/upcoming/${studentId}`,
-  getPastFeedback: (feedbackId, studentId) =>
-    `${baseURL}/performance/feedback/${feedbackId}/${studentId}`,
+  updateFeedbackToPast:(studentId,teacherId)=>`${baseURL}/performance/feedback/${studentId}/${teacherId}`,
   createCall: `${baseURL}/performance/calls`,
-  getCalls: studentId => `${baseURL}/performance/calls/${studentId}`,
+  getCalls: (studentId,teacherId) => `${baseURL}/performance/calls/${studentId}/${teacherId}`,
 
-  getClassPeriodByTeacher: teacherId =>
-    `${baseURL}/classPeriods/getAll/${teacherId}`,
+  getClassPeriodByTeacher: (teacherId,today) =>`${baseURL}/classPeriods/getAll/${teacherId}?date=${today}`,
   updatePeriods: periodId => `${baseURL}/classPeriods/${periodId}`,
   getTasksByPeriods: periodId => `${baseURL}/tasks/task/${periodId}`,
   updateTask: taskId => `${baseURL}/tasks/task/${taskId}`,
   updatePeriods: periodId => `${baseURL}/classPeriods/${periodId}`,
 
   sendLoginTrack : `${baseURL}/teacher/app/loginTrack`,
+  sendLogoutTrack : `${baseURL}/teacher/app/logoutTrack`,
   getArrangementClass: teacherId => `${baseURL}/classPeriods/arrangement/${teacherId}`,
   getSubjectName: subjectId => `${baseURL}/subject/${subjectId}`,
-  getClassName: classId => `${baseURL}/class/classDetail/${classId}`
+  getClassName: classId => `${baseURL}/class/classDetail/${classId}`,
+
+  getTimetableByTeacher: teacherId => `${baseURL}/classPeriods/timetable/teacher/${teacherId}`,
+  getUnresolvedComplaints: teacherId => `${baseURL}/complains/referredComplaints/${teacherId}`,
+  resolveComplaint: `${baseURL}/complains/resolve`,
+
+  calculateAttendanceMonthly: `${baseURL}/teacherAttendance/calculate`,
 };
 
 export default apiList;

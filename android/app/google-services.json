@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "973505118420",
+    "project_id": "teacher-tracking-app",
+    "storage_bucket": "teacher-tracking-app.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:973505118420:android:8677368692e22565a37b41",
+        "android_client_info": {
+          "package_name": "com.cogradteachingtrack"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAyh4VpeqTi5GiGuc980nnU-mW2Wg6hNsA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

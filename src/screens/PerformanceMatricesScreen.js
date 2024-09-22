@@ -12,11 +12,13 @@ import {
   Dimensions,
   Linking,
   Modal,
+  Alert,
 } from 'react-native';
 import {SelectList} from 'react-native-dropdown-select-list';
 import Icon from 'react-native-vector-icons/Ionicons';
 import apiList from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useTheme} from '../../ThemeContext';
 
 const {width} = Dimensions.get('window');
 
@@ -25,6 +27,7 @@ const PerformanceMatricesScreen = ({navigation}) => {
   const [students, setStudents] = useState([]);
   const [classValue, setClassValue] = useState(null);
   const [classes, setClasses] = useState([]);
+  const [selectedClass, setSelectedClass] = useState();
   const [purposeValue, setPurposeValue] = useState(null);
   const [purposes, setPurposes] = useState([
     {label: 'Appreciation', value: 'appreciation'},
@@ -37,6 +40,11 @@ const PerformanceMatricesScreen = ({navigation}) => {
 
   const [teacherId, setTeacherId] = useState(''); // Replace with actual teacher ID
   const [schoolId, setSchoolId] = useState(''); // Replace with actual school ID
+
+  const {theme} = useTheme();
+  const styles = createStyles(theme);
+
+  console.log(students);
 
   useEffect(() => {
     const Data = async () => {
@@ -75,6 +83,7 @@ const PerformanceMatricesScreen = ({navigation}) => {
     if (selectedClass) {
       const classId = selectedClass.id;
       setClassValue(className);
+      setSelectedClass(classId);
 
       // Fetch students by class from API using the class ID
       fetch(apiList.getAllStudentByClass(classId))
@@ -92,63 +101,136 @@ const PerformanceMatricesScreen = ({navigation}) => {
   const handleStudentChange = StudentName => {
     const student = students.find(stu => stu.name === StudentName);
     setStudentValue(student._id);
+    setSelectedStudentDetails(student);
   };
 
-  const handleCallSubmission = () => {
-    if (!studentValue || !purposeValue) {
-      alert('Please select a student and provide a purpose for the call.');
-      return;
-    }
-    const currentDate = new Date().toISOString().slice(0, 10);
-    const newCall = {
-      date: currentDate,
-      purpose: purposes.find(p => p.value === purposeValue)?.label || '',
-      summary: newCallNotes,
-    };
+  const handleFeedbacksAndCallSubmission = async () => {
+    try {
+      if (!studentValue || !purposeValue || !newCallNotes) {
+        Alert.alert('Please fill all the details for the call.');
+        return;
+      }
+      const currentDate = new Date().toISOString().slice(0, 10);
 
-    // Post new call data to API
-    fetch(apiList.createCall, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        studentId: studentValue,
-        time: currentDate, // Adjust as per your API requirements
-        teacherId: teacherId, // Replace with actual teacher ID
-      }),
-    })
-      .then(response => response.json())
-      .then(data => {
-        const updatedStudents = students.map(student =>
-          student._id === studentValue
-            ? {
-                ...student,
-                pastFeedbacks: [...student.pastFeedbacks, newCall],
-              }
-            : student,
-        );
-        setStudents(updatedStudents);
+      const newCall = {
+        date: currentDate,
+        purpose: purposes.find(p => p.value === purposeValue)?.label || '',
+        summary: newCallNotes,
+      };
+
+      const response = await fetch(
+        apiList.updateFeedbackToPast(selectedStudentDetails._id, teacherId),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newCall),
+        },
+      );
+      const data = await response.json();
+
+      if (response.status === 200) {
+        console.log('Feedback Updated Successfully');
+        Alert.alert('Feedback Updated Successfully');
+
+        // Update the selected student details
+        setSelectedStudentDetails(prevDetails => ({
+          ...prevDetails,
+          pastFeedbacks: [
+            ...prevDetails.pastFeedbacks,
+            {
+              date: currentDate,
+              purpose:
+                purposes.find(p => p.value === purposeValue)?.label || '',
+              summary: newCallNotes,
+            },
+          ],
+        }));
         setNewCallNotes('');
-      })
-      .catch(error => console.error('Error creating call:', error));
+
+        // Refetch student data
+        const selectedStudent = students.find(s => s._id === studentValue);
+        if (selectedStudent) {
+          const updatedStudentResponse = await fetch(
+            apiList.getAllStudentByClass(selectedClass),
+          );
+
+          const updatedStudentData = await updatedStudentResponse.json();
+          setStudents(updatedStudentData);
+        }
+      } else {
+        console.log('Feedback Update Failed');
+        Alert.alert('Feedback Update Failed', data.message);
+      }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
-  const handleCall = phoneNumber => {
-    const currentDate = new Date().toISOString().slice(0, 10);
-    const updatedStudents = students.map(student =>
-      student._id === studentValue
-        ? {
-            ...student,
-            pastFeedbacks: [
-              ...student.pastFeedbacks,
-              {date: currentDate, purpose: 'Call', summary: ''},
-            ],
-          }
-        : student,
-    );
-    setStudents(updatedStudents);
-    Linking.openURL(`tel:${phoneNumber}`);
+  const handleCall = async phoneNumber => {
+    const currentDate = new Date().toISOString();
+
+    // Optimistically update the call history state
+    setSelectedStudentDetails(prevDetails => ({
+      ...prevDetails,
+      callHistory: [
+        ...prevDetails.callHistory,
+        {time: currentDate, purpose: 'Call', summary: ''},
+      ],
+    }));
+
+    try {
+      const response = await fetch(apiList.createCall, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentId: studentValue,
+          time: currentDate,
+          teacherId: teacherId,
+        }),
+      });
+
+      if (response.ok) {
+        // Refetch the updated call history
+        await fetchCallHistory(studentValue, teacherId);
+
+        // Open the dialer after updating the call history
+        Linking.openURL(`tel: +91${phoneNumber}`);
+      } else {
+        throw new Error('Failed to create call');
+      }
+    } catch (error) {
+      console.error('Error creating call:', error);
+      Alert.alert('Error Creating Call');
+    }
+  };
+
+  // Function to fetch the updated call history
+  const fetchCallHistory = async (studentValue, teacherId) => {
+    try {
+      const response = await fetch(apiList.getCalls(studentValue, teacherId), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(data);
+        setSelectedStudentDetails(prevDetails => ({
+          ...prevDetails,
+          callHistory: data, // Assuming the API returns the updated call history
+        }));
+      } else {
+        throw new Error('Failed to fetch call history');
+      }
+    } catch (error) {
+      console.error('Error fetching call history:', error);
+    }
   };
 
   const handleViewAllPastCalls = student => {
@@ -159,19 +241,20 @@ const PerformanceMatricesScreen = ({navigation}) => {
   const renderStudentDetail = () => {
     if (!studentValue) return null;
     const selectedStudent = students.find(s => s._id === studentValue);
+
     return (
       <View style={styles.studentDetailContainer}>
         <Text style={styles.label}>Phone Number</Text>
         <View style={styles.phoneNumberContainer}>
           <Text style={styles.phoneNumberText}>
-            {selectedStudent?.phoneNumber}
+            +91 {selectedStudent?.parentContact}
           </Text>
           <TouchableOpacity
-            onPress={() => handleCall(selectedStudent?.phoneNumber)}>
+            onPress={() => handleCall(selectedStudent?.parentContact)}>
             <Icon
               name="call"
               size={24}
-              color="#6495ed"
+              color={theme.blue}
               style={styles.callIcon}
             />
           </TouchableOpacity>
@@ -187,6 +270,7 @@ const PerformanceMatricesScreen = ({navigation}) => {
   const navigateToCommunicationScreen = () => {
     navigation.navigate('Communication');
   };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -199,7 +283,7 @@ const PerformanceMatricesScreen = ({navigation}) => {
             <Icon
               name="chevron-back"
               size={30}
-              color="#6495ed"
+              color={theme.blue}
               style={styles.backButton}
             />
           </TouchableOpacity>
@@ -210,7 +294,7 @@ const PerformanceMatricesScreen = ({navigation}) => {
           <Icon
             name="notifications-outline"
             size={30}
-            color="#6495ed"
+            color={theme.blue}
             style={styles.notification}
           />
         </TouchableOpacity>
@@ -228,6 +312,9 @@ const PerformanceMatricesScreen = ({navigation}) => {
               save="value"
               placeholder="Select Class"
               boxStyles={styles.dropdownBox}
+              inputStyles={styles.dropdownText}
+              dropdownItemStyles={styles.dropdownItem}
+              dropdownTextStyles={styles.dropdownText}
             />
           </View>
 
@@ -244,6 +331,9 @@ const PerformanceMatricesScreen = ({navigation}) => {
               search
               searchPlaceholder="Search for a student"
               boxStyles={styles.dropdownBox}
+              inputStyles={styles.dropdownText}
+              dropdownItemStyles={styles.dropdownItem}
+              dropdownTextStyles={styles.dropdownText}
             />
           </View>
 
@@ -251,19 +341,34 @@ const PerformanceMatricesScreen = ({navigation}) => {
           {studentValue && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Past Feedbacks & Calls</Text>
-              {students.find(s => s._id === studentValue)?.pastFeedbacks
-                ?.length === 0 ? (
-                <Text>No past feedbacks or calls available.</Text>
+              {(
+                students
+                  .find(s => s._id === studentValue)
+                  ?.pastFeedbacks.filter(
+                    feedback => feedback.teacherId?.toString() === teacherId,
+                  ) || []
+              ).length === 0 ? (
+                <Text style={styles.noDataText}>
+                  No past feedbacks or calls available.
+                </Text>
               ) : (
                 <FlatList
                   data={
-                    students.find(s => s._id === studentValue)?.pastFeedbacks ||
-                    []
+                    students
+                      ? students
+                          .find(s => s._id === studentValue)
+                          ?.pastFeedbacks.filter(
+                            feedback =>
+                              feedback.teacherId?.toString() === teacherId,
+                          ) || []
+                      : []
                   }
                   keyExtractor={(item, index) => index.toString()}
                   renderItem={({item}) => (
                     <View style={styles.tableRow}>
-                      <Text style={styles.tableCell}>{item.date}</Text>
+                      <Text style={styles.tableCell}>
+                        {new Date(item.date).toISOString().split('T')[0]}
+                      </Text>
                       <Text style={styles.tableCell}>{item.purpose}</Text>
                       <Text style={styles.tableCell}>{item.summary}</Text>
                     </View>
@@ -276,13 +381,26 @@ const PerformanceMatricesScreen = ({navigation}) => {
           {/* Upcoming Calls Section */}
           {studentValue && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming Calls</Text>
-              {students.find(s => s._id === studentValue)?.upcomingCalls
-                ?.length > 0 ? (
+              <Text style={styles.sectionTitle}>
+                Upcoming Feedbacks & Calls
+              </Text>
+              {(
+                students
+                  .find(s => s._id === studentValue)
+                  ?.upcomingFeedbacks.filter(
+                    feedback => feedback.teacherId.toString() === teacherId,
+                  ) || []
+              ).length > 0 ? (
                 <FlatList
                   data={
-                    students.find(s => s._id === studentValue)?.upcomingCalls ||
-                    []
+                    students
+                      ? students
+                          .find(s => s._id === studentValue)
+                          ?.upcomingFeedbacks.filter(
+                            feedback =>
+                              feedback.teacherId.toString() === teacherId,
+                          ) || []
+                      : []
                   }
                   keyExtractor={(item, index) => index.toString()}
                   renderItem={({item}) => {
@@ -298,7 +416,9 @@ const PerformanceMatricesScreen = ({navigation}) => {
 
                     return (
                       <View style={styles.tableRow}>
-                        <Text style={styles.tableCell}>{item.date}</Text>
+                        <Text style={styles.tableCell}>
+                          {new Date(item.date).toISOString().split('T')[0]}
+                        </Text>
                         <Text style={styles.tableCell}>{item.purpose}</Text>
                         <Text style={styles.tableCell}>
                           {calculateCountdown()}
@@ -308,7 +428,9 @@ const PerformanceMatricesScreen = ({navigation}) => {
                   }}
                 />
               ) : (
-                <Text>No upcoming calls scheduled.</Text>
+                <Text style={styles.noDataText}>
+                  No upcoming calls scheduled.
+                </Text>
               )}
             </View>
           )}
@@ -325,21 +447,25 @@ const PerformanceMatricesScreen = ({navigation}) => {
                     save="value"
                     placeholder="Select Purpose"
                     boxStyles={styles.dropdownBox}
+                    inputStyles={styles.dropdownText}
+                    dropdownItemStyles={styles.dropdownItem}
+                    dropdownTextStyles={styles.dropdownText}
                   />
                 </View>
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="Summary (optional)"
+                placeholder="Summary"
                 value={newCallNotes}
                 onChangeText={setNewCallNotes}
                 multiline
                 numberOfLines={4}
+                placeholderTextColor={theme.gray}
               />
               <TouchableOpacity
                 style={styles.button}
-                onPress={handleCallSubmission}>
-                <Text style={styles.buttonText}>Submit Call</Text>
+                onPress={handleFeedbacksAndCallSubmission}>
+                <Text style={styles.buttonText}>Submit Feedbacks & Call</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -360,20 +486,25 @@ const PerformanceMatricesScreen = ({navigation}) => {
             <Text style={styles.modalTitle}>
               Past Calls for {selectedStudentDetails?.name}
             </Text>
-            {selectedStudentDetails?.pastCalls?.length > 0 ? (
+            {selectedStudentDetails?.callHistory?.length > 0 ? (
               <FlatList
-                data={selectedStudentDetails?.pastCalls || []}
+                data={
+                  selectedStudentDetails?.callHistory.filter(
+                    call => call.teacherId === teacherId,
+                  ) || []
+                }
                 keyExtractor={(item, index) => index.toString()}
                 renderItem={({item}) => (
                   <View style={styles.modalItem}>
-                    <Text style={styles.modalText}>{item.date}</Text>
+                    <Text style={styles.modalText}>
+                      {new Date(item.time).toLocaleString()}
+                    </Text>
                     <Text style={styles.modalText}>{item.purpose}</Text>
-                    <Text style={styles.modalText}>{item.summary}</Text>
                   </View>
                 )}
               />
             ) : (
-              <Text>No past calls available.</Text>
+              <Text style={styles.noDataText}>No past calls available.</Text>
             )}
             <TouchableOpacity
               style={styles.modalCloseButton}
@@ -387,182 +518,196 @@ const PerformanceMatricesScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    padding: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 0.04 * width,
-    paddingHorizontal: 0.025 * width,
-    backgroundColor: '#fff',
-  },
-  headingTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButton: {},
-  headerText: {
-    fontSize: 0.06 * width,
-    fontWeight: 'bold',
-    color: '#6495ed',
-  },
-  notification: {},
-  content: {
-    flex: 1,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: '#6495ed',
-    fontWeight: 'bold',
-  },
-  dropdown: {
-    marginBottom: 16,
-  },
-  dropdownBox: {
-    borderColor: '#6495ed',
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#6495ed',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-  },
-  tableCell: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  textArea: {
-    borderWidth: 1,
-    borderColor: '#6495ed',
-    borderRadius: 4,
-    padding: 8,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    marginBottom: 16,
-  },
-  submitButton: {
-    backgroundColor: '#6495ed',
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  studentDetailContainer: {
-    marginTop: 20,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 10,
-    fontSize: 16,
-    minHeight: 100,
-  },
-  button: {
-    backgroundColor: '#6495ed',
-    padding: 15,
-    borderRadius: 5,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-    paddingVertical: 10,
-  },
-  tableCell: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  phoneNumberContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  phoneNumberText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  callIcon: {
-    marginLeft: 10,
-  },
-  viewDetailButton: {
-    fontSize: 14,
-    color: '#6495ed',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'white',
-    padding: 16,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#6495ed',
-    marginBottom: 16,
-  },
-  modalTableRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-  },
-  modalTableCell: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  modalCloseButton: {
-    backgroundColor: '#6495ed',
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  modalCloseText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-});
+const createStyles = theme =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.white,
+    },
+    scrollContainer: {
+      flexGrow: 1,
+      padding: 16,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 0.04 * width,
+      paddingHorizontal: 0.025 * width,
+      backgroundColor: theme.white,
+    },
+    headingTextContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    backButton: {},
+    headerText: {
+      fontSize: 0.06 * width,
+      fontWeight: 'bold',
+      color: theme.blue,
+    },
+    notification: {},
+    content: {
+      flex: 1,
+    },
+    label: {
+      fontSize: 16,
+      marginBottom: 8,
+      color: theme.blue,
+      fontWeight: 'bold',
+    },
+    dropdown: {
+      marginBottom: 16,
+    },
+    dropdownBox: {
+      borderColor: theme.blue,
+    },
+    dropdownText: {
+      fontSize: 0.04 * width,
+      color: theme.gray,
+      backgroundColor: theme.white,
+    },
+    dropdownItem: {
+      backgroundColor: theme.white,
+      paddingVertical: 10,
+    },
+    section: {
+      marginBottom: 32,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 8,
+      color: theme.blue,
+    },
+    noDataText: {
+      color: theme.gray,
+    },
+
+    textArea: {
+      borderWidth: 1,
+      borderColor: theme.blue,
+      borderRadius: 4,
+      padding: 8,
+      minHeight: 100,
+      textAlignVertical: 'top',
+      marginBottom: 16,
+    },
+    submitButton: {
+      backgroundColor: theme.blue,
+      paddingVertical: 12,
+      borderRadius: 4,
+      alignItems: 'center',
+    },
+    submitButtonText: {
+      color: theme.white,
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    studentDetailContainer: {
+      marginTop: 20,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: theme.lightGray,
+      borderRadius: 5,
+      padding: 10,
+      marginBottom: 10,
+      fontSize: 16,
+      minHeight: 100,
+      color: theme.gray,
+      textAlignVertical: 'top',
+    },
+    button: {
+      backgroundColor: theme.blue,
+      padding: 15,
+      borderRadius: 5,
+      alignItems: 'center',
+      marginTop: 10,
+    },
+    buttonText: {
+      color: theme.white,
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    tableRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: theme.lightGray,
+      paddingVertical: 10,
+    },
+    tableCell: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 16,
+      color: theme.gray,
+    },
+    phoneNumberContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    phoneNumberText: {
+      fontSize: 16,
+      color: theme.lightBlack,
+    },
+    callIcon: {
+      marginLeft: 10,
+    },
+    viewDetailButton: {
+      fontSize: 14,
+      color: theme.blue,
+    },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: theme.white,
+      padding: 16,
+    },
+    modalTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.blue,
+      marginBottom: 16,
+    },
+    modalTableRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.lightGray,
+    },
+    modalTableCell: {
+      flex: 1,
+      textAlign: 'center',
+    },
+    modalItem: {
+      display: 'flex',
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+    },
+    modalCloseButton: {
+      backgroundColor: theme.blue,
+      paddingVertical: 12,
+      borderRadius: 4,
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    modalCloseText: {
+      color: theme.white,
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    modalText: {
+      color: theme.gray,
+    },
+  });
 
 export default PerformanceMatricesScreen;
