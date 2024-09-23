@@ -60,23 +60,28 @@ const LoginTracking = ({teacherId, onLoginSuccess}) => {
   };
 
   const getCurrentPositionAsync = async (retryCount = 0) => {
-    return new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(
-        position => resolve(position),
-        error => {
-          if (error.code === 3 && retryCount < 3) {
-            setTimeout(() => {
-              resolve(getCurrentPositionAsync(retryCount + 1));
-            }, 2000);
-          } else {
-            reject(error);
-          }
-        },
-        {enableHighAccuracy: false, timeout: 15000, maximumAge: 10000},
-      );
-    });
+    try {
+      return await new Promise((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          position => resolve(position),
+          error => {
+            if (error.code === 3 && retryCount < 3) {
+              setTimeout(() => {
+                resolve(getCurrentPositionAsync(retryCount + 1));
+              }, 2000);
+            } else {
+              reject(error);
+            }
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+      });
+    } catch (error) {
+      throw error; // Propagate the error to the caller
+    }
   };
-
+  
+  
   const captureSelfieAndLocation = async () => {
     try {
       if (!cameraRef) {
