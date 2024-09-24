@@ -60,79 +60,83 @@ const LoginTracking = ({teacherId, onLoginSuccess}) => {
   };
 
   const getCurrentPositionAsync = async (retryCount = 0) => {
-    try {
-      return await new Promise((resolve, reject) => {
-        Geolocation.getCurrentPosition(
-          position => resolve(position),
-          error => {
-            if (error.code === 3 && retryCount < 3) {
-              setTimeout(() => {
-                resolve(getCurrentPositionAsync(retryCount + 1));
-              }, 2000);
-            } else {
-              reject(error);
-            }
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-        );
-      });
-    } catch (error) {
-      throw error; // Propagate the error to the caller
-    }
+    return new Promise((resolve, reject) => {
+      Geolocation.getCurrentPosition(
+        position => resolve(position),
+        error => {
+          if (error.code === 3 && retryCount < 3) {
+            setTimeout(() => {
+              resolve(getCurrentPositionAsync(retryCount + 1));
+            }, 2000);
+          } else {
+            reject(error);
+          }
+        },
+        {enableHighAccuracy: false, timeout: 15000, maximumAge: 10000},
+      );
+    });
   };
-  
-  
+
   const captureSelfieAndLocation = async () => {
     try {
       if (!cameraRef) {
         Alert.alert('Error', 'Camera not available');
         return;
       }
-  
+
       // Capture the selfie
       const originalSelfie = await cameraRef.takePictureAsync({
         quality: 0.5,
         base64: true,
       });
-  
+
       // Resize the image
       const resizedImage = await ImageResizer.createResizedImage(
         originalSelfie.uri,
         800, // New width
         600, // New height
         'JPEG', // Image format
-        80 // Quality percentage
+        80, // Quality percentage
       );
-  
+
       // Convert resized image to Base64
-      const resizedImageBase64 = await RNFS.readFile(resizedImage.uri, 'base64');
-  
+      const resizedImageBase64 = await RNFS.readFile(
+        resizedImage.uri,
+        'base64',
+      );
+
       setSelfieCaptured(true);
       setSelfieData(resizedImageBase64);
-  
+
       // Get location and send data
       const locationEnabled = await promptToEnableLocation();
       if (locationEnabled) {
         try {
           const position = await getCurrentPositionAsync();
-          const { latitude, longitude } = position.coords;
-          setLocation({ latitude, longitude });
-  
+          const {latitude, longitude} = position.coords;
+          setLocation({latitude, longitude});
+
           const loginTime = new Date().toISOString();
           setLoginTime(loginTime);
-  
-          await sendDataToServer(resizedImageBase64, latitude, longitude, loginTime);
+
+          await sendDataToServer(
+            resizedImageBase64,
+            latitude,
+            longitude,
+            loginTime,
+          );
           onLoginSuccess(); // Notify parent component of successful login
         } catch (locationError) {
-          Alert.alert('Error Getting Location', 'Unable to retrieve location. Please try again.');
+          Alert.alert(
+            'Error Getting Location',
+            'Unable to retrieve location. Please try again.',
+          );
         }
       }
     } catch (error) {
       Alert.alert('Error Capturing Selfie', error.message || 'Unknown error');
     }
   };
-
-
 
   const sendDataToServer = async (selfie, latitude, longitude, loginTime) => {
     try {
@@ -143,9 +147,9 @@ const LoginTracking = ({teacherId, onLoginSuccess}) => {
         longitude,
         loginTime,
       };
-  
+
       console.log(trackdata);
-  
+
       const response = await fetch(apiList.sendLoginTrack, {
         method: 'POST',
         headers: {
@@ -153,7 +157,7 @@ const LoginTracking = ({teacherId, onLoginSuccess}) => {
         },
         body: JSON.stringify(trackdata),
       });
-  
+
       if (!response.ok) {
         const errorText = await response.text(); // Get the response text, which might be HTML or something else.
         let errorMessage = 'Unknown error';
@@ -167,14 +171,14 @@ const LoginTracking = ({teacherId, onLoginSuccess}) => {
         Alert.alert('Error Sending Data', errorMessage);
         return;
       }
-  
+
       const data = await response.json(); // Parse the successful response as JSON.
       await AsyncStorage.setItem('isLoggedInStatus', 'true');
     } catch (error) {
       Alert.alert('Error Sending Data', error.message || 'Unknown error');
     }
   };
-  
+
   return !selfieCaptured && isLoggedInStatus !== 'true' ? (
     <RNCamera
       ref={ref => setCameraRef(ref)}
