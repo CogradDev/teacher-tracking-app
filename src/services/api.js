@@ -2,42 +2,42 @@
 const baseURL = "https://cograd-erp-backend.onrender.com";
 
 const apiList = {
-  login: `${baseURL}/teacher/app/login`,
-  getTeacherById: teacherId => `${baseURL}/teacher/getTeacherById/${teacherId}`,
+  login: `${baseURL}/api/teacher/app/login`,
+  getTeacherById: teacherId => `${baseURL}/api/teacher/getTeacherById/${teacherId}`,
   getNotifications: teacherId =>
-    `${baseURL}/notifications/teacher/${teacherId}`,
-  getAnnouncements: `${baseURL}/announcements`,
+    `${baseURL}/api/notifications/teacher/${teacherId}`,
+  getAnnouncements: `${baseURL}/api/announcements`,
 
-  getClassList: schoolId => `${baseURL}/class/get/${schoolId}`,
-  checkClassTeacher: teacherId => `${baseURL}/classTeacher/check/${teacherId}`,
+  getClassList: schoolId => `${baseURL}/api/class/get/${schoolId}`,
+  checkClassTeacher: teacherId => `${baseURL}/api/classTeacher/check/${teacherId}`,
   getAllStudentByClass: className =>
-    `${baseURL}/student/studentList/${className}`,
+    `${baseURL}/api/student/studentList/${className}`,
 
-  takeAttendance: `${baseURL}/studentAttendance/mark`,
-  updateAttendance: date=> `${baseURL}/studentAttendance/update/${date}`,
-  fetchStudentAttendanceByDateAndId: (studentId, date)=>`${baseURL}/studentAttendance/${studentId}/${date}`,
+  takeAttendance: `${baseURL}/api/studentAttendance/mark`,
+  updateAttendance: date=> `${baseURL}/api/studentAttendance/update/${date}`,
+  fetchStudentAttendanceByDateAndId: (studentId, date)=>`${baseURL}/api/studentAttendance/${studentId}/${date}`,
 
-  updateFeedbackToPast:(studentId,teacherId)=>`${baseURL}/performance/feedback/${studentId}/${teacherId}`,
-  createCall: `${baseURL}/performance/calls`,
-  getCalls: (studentId,teacherId) => `${baseURL}/performance/calls/${studentId}/${teacherId}`,
+  updateFeedbackToPast:(studentId,teacherId)=>`${baseURL}/api/performance/feedback/${studentId}/${teacherId}`,
+  createCall: `${baseURL}/api/performance/calls`,
+  getCalls: (studentId,teacherId) => `${baseURL}/api/performance/calls/${studentId}/${teacherId}`,
 
-  getClassPeriodByTeacher: (teacherId,today) =>`${baseURL}/classPeriods/getAll/${teacherId}?date=${today}`,
-  updatePeriods: periodId => `${baseURL}/classPeriods/${periodId}`,
-  getTasksByPeriods: periodId => `${baseURL}/tasks/task/${periodId}`,
-  updateTask: taskId => `${baseURL}/tasks/task/${taskId}`,
-  updatePeriods: periodId => `${baseURL}/classPeriods/${periodId}`,
+  getClassPeriodByTeacher: (teacherId,today) =>`${baseURL}/api/classPeriods/getAll/${teacherId}?date=${today}`,
+  updatePeriods: periodId => `${baseURL}/api/classPeriods/${periodId}`,
+  getTasksByPeriods: periodId => `${baseURL}/api/tasks/task/${periodId}`,
+  updateTask: taskId => `${baseURL}/api/tasks/task/${taskId}`,
+  updatePeriods: periodId => `${baseURL}/api/classPeriods/${periodId}`,
 
-  sendLoginTrack : `${baseURL}/teacher/app/loginTrack`,
-  sendLogoutTrack : `${baseURL}/teacher/app/logoutTrack`,
-  getArrangementClass: teacherId => `${baseURL}/classPeriods/arrangement/${teacherId}`,
-  getSubjectName: subjectId => `${baseURL}/subject/${subjectId}`,
-  getClassName: classId => `${baseURL}/class/classDetail/${classId}`,
+  sendLoginTrack : `${baseURL}/api/teacher/app/loginTrack`,
+  sendLogoutTrack : `${baseURL}/api/teacher/app/logoutTrack`,
+  getArrangementClass: teacherId => `${baseURL}/api/classPeriods/arrangement/${teacherId}`,
+  getSubjectName: subjectId => `${baseURL}/api/subject/${subjectId}`,
+  getClassName: classId => `${baseURL}/api/class/classDetail/${classId}`,
 
-  getTimetableByTeacher: teacherId => `${baseURL}/classPeriods/timetable/teacher/${teacherId}`,
-  getUnresolvedComplaints: teacherId => `${baseURL}/complains/referredComplaints/${teacherId}`,
-  resolveComplaint: `${baseURL}/complains/resolve`,
+  getTimetableByTeacher: teacherId => `${baseURL}/api/classPeriods/timetable/teacher/${teacherId}`,
+  getUnresolvedComplaints: teacherId => `${baseURL}/api/complains/referredComplaints/${teacherId}`,
+  resolveComplaint: `${baseURL}/api/complains/resolve`,
 
-  calculateAttendanceMonthly: `${baseURL}/teacherAttendance/calculate`,
+  calculateAttendanceMonthly: `${baseURL}/api/teacherAttendance/calculate`,
 };
 
 export default apiList;
